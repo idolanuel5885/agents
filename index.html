@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Runner</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <h1 class="logo">⚡ Agent Runner</h1>
+
+      <section class="card status-card">
+        <h2>Pipeline Status</h2>
+        <div class="stats" id="stats">
+          <div class="stat"><span id="stat-open">—</span><small>Open leads</small></div>
+          <div class="stat"><span id="stat-leads">—</span><small>Enriched</small></div>
+          <div class="stat"><span id="stat-total">—</span><small>Total jobs</small></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Run Pipeline</h2>
+        <label class="field">
+          <span>Scraper (optional)</span>
+          <select id="scraper-select">
+            <option value="">All scrapers</option>
+          </select>
+        </label>
+        <label class="field checkbox-field">
+          <input type="checkbox" id="dry-run" />
+          <span>Dry run (no enrichment / sheet writes)</span>
+        </label>
+        <button id="run-btn" class="btn-primary">Run now</button>
+      </section>
+
+      <section class="card">
+        <h2>Recent Runs</h2>
+        <ul class="run-list" id="run-list"></ul>
+      </section>
+    </aside>
+
+    <!-- Main log panel -->
+    <main class="main">
+      <div class="log-header">
+        <h2 id="log-title">Logs</h2>
+        <span id="run-badge" class="badge"></span>
+        <button id="clear-btn" class="btn-ghost" onclick="clearLogs()">Clear</button>
+      </div>
+      <div class="log-wrap">
+        <pre id="log-output" class="log"></pre>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

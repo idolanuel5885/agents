@@ -1,0 +1,3 @@
+[submodule "job-pipeline"]
+	path = job-pipeline
+	url = https://github.com/idolanuel5885/job-pipeline.git

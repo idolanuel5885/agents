@@ -1,0 +1,18 @@
+# Secrets
+.env
+job-pipeline/.env
+job-pipeline/credentials/
+job-pipeline/pipeline.db
+job-pipeline/*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs
+job-pipeline/logs/
+
+# OS
+.DS_Store
