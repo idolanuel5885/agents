@@ -1,0 +1,7 @@
+[build]
+builder = "nixpacks"
+buildCommand = "git submodule update --init --recursive && pip install -r requirements.txt && pip install -r agents/job-pipeline/requirements.txt"
+
+[deploy]
+startCommand = "uvicorn server:app --host 0.0.0.0 --port $PORT"
+restartPolicyType = "on_failure"
