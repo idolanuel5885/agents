@@ -105,14 +105,15 @@ def parse_input_to_flags(user_input: str, help_text: str) -> list[str]:
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
     prompt = (
-        f"Convert this natural language request into CLI arguments for the command below.\n"
-        f"Request: \"{user_input}\"\n\n"
-        f"CLI help output:\n{help_text}\n\n"
+        f"The command `python run.py` is already set up and will run automatically. "
+        f"Your only job is to decide what FLAGS or ARGUMENTS to append after it.\n\n"
+        f"User request: \"{user_input}\"\n\n"
+        f"Available flags (from --help):\n{help_text}\n\n"
         f"Rules:\n"
-        f"- Reply with ONLY the shell arguments, nothing else\n"
-        f"- Quote any multi-word positional arguments with double quotes (e.g. \"food trucks in the US\")\n"
-        f"- Named flags look like --flag value or --flag\n"
-        f"- Reply with exactly (empty) if no arguments are needed"
+        f"- Reply with ONLY the flags/arguments to append (e.g. --dry-run or \"food trucks\")\n"
+        f"- Do NOT include 'python', 'run.py', or any command name — just the arguments\n"
+        f"- Quote multi-word positional arguments with double quotes\n"
+        f"- If the user just wants to run normally with no special options, reply with exactly: (empty)"
     )
     msg = client.messages.create(
         model="claude-haiku-4-5",
@@ -170,7 +171,7 @@ async def run_agent(req: RunRequest):
 
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if req.input and api_key:
-            yield b"\n\n\u2500\u2500\u2500 Summary \u2500\u2500\u2500\n"
+            yield "\n\n─── Summary ───\n".encode()
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
             combined_output = "".join(output_lines)[-4000:]
