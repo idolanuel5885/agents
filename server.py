@@ -83,10 +83,24 @@ def get_agent_help(agent_dir: Path) -> str:
         return ""
 
 
+def _looks_like_flags(text: str) -> bool:
+    """True if the input is already CLI flags rather than natural language."""
+    return bool(text.strip().startswith("--") or text.strip().startswith("-"))
+
+
 def parse_input_to_flags(user_input: str, help_text: str) -> list[str]:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        return shlex.split(user_input)
+        if _looks_like_flags(user_input):
+            return shlex.split(user_input)
+        # Natural language with no API key — run with no flags, warn user
+        print(
+            "[Warning] ANTHROPIC_API_KEY is not set — cannot translate natural language to flags. "
+            "Running the agent with no extra arguments. "
+            "Set ANTHROPIC_API_KEY in your environment to enable natural language input.",
+            flush=True,
+        )
+        return []
 
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
