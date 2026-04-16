@@ -1,164 +1,107 @@
-const API = "";  // same origin
+const agentSelect = document.getElementById('agent-select');
+const inputText   = document.getElementById('input-text');
+const startBtn    = document.getElementById('start-btn');
+const outputGroup = document.getElementById('output-group');
+const outputBox   = document.getElementById('output-text');
 
-let activeRunId = null;
-let activeSSE = null;
-
-// ── Boot ──────────────────────────────────────────────────────────────────────
-(async () => {
-  await Promise.all([loadStatus(), loadScrapers(), loadRuns()]);
-})();
-
-// ── Polling ───────────────────────────────────────────────────────────────────
-setInterval(loadStatus, 8000);
-setInterval(loadRuns,   15000);
-
-// ── Status ────────────────────────────────────────────────────────────────────
-async function loadStatus() {
+async function loadAgents() {
   try {
-    const s = await fetch(`${API}/status`).then(r => r.json());
-    document.getElementById("stat-open").textContent  = s.jobs_open  ?? "—";
-    document.getElementById("stat-leads").textContent = s.leads      ?? "—";
-    document.getElementById("stat-total").textContent = s.jobs_total ?? "—";
+    const res  = await fetch('/agents');
+    const data = await res.json();
 
-    const btn = document.getElementById("run-btn");
-    if (s.active_run) {
-      btn.disabled = true;
-      btn.textContent = "Running…";
-    } else {
-      btn.disabled = false;
-      btn.textContent = "Run now";
-    }
-  } catch {}
-}
+    agentSelect.innerHTML = '';
 
-// ── Scrapers ──────────────────────────────────────────────────────────────────
-async function loadScrapers() {
-  try {
-    const scrapers = await fetch(`${API}/scrapers`).then(r => r.json());
-    const sel = document.getElementById("scraper-select");
-    (Array.isArray(scrapers) ? scrapers : []).forEach(name => {
-      const opt = document.createElement("option");
-      opt.value = name;
-      opt.textContent = name;
-      sel.appendChild(opt);
-    });
-  } catch {}
-}
-
-// ── Run history ───────────────────────────────────────────────────────────────
-async function loadRuns() {
-  try {
-    const runs = await fetch(`${API}/runs`).then(r => r.json());
-    const ul = document.getElementById("run-list");
-    ul.innerHTML = "";
-    (Array.isArray(runs) ? runs : []).forEach(run => {
-      const li = document.createElement("li");
-      li.className = "run-item";
-      const finishedAt = run.finished_at ? new Date(run.finished_at).toLocaleString() : "—";
-      const statusCls = run.finished_at ? "done" : "running";
-      li.innerHTML = `
-        <div class="run-id">${run.run_id}</div>
-        <div class="run-meta">
-          <span class="pill ${statusCls}">${run.finished_at ? "done" : "running"}</span>
-          ${run.jobs_new ?? 0} new · ${run.enriched ?? 0} enriched
-        </div>
-        <div class="run-id" style="margin-top:2px">${finishedAt}</div>
-      `;
-      ul.appendChild(li);
-    });
-  } catch {}
-}
-
-// ── Run button ────────────────────────────────────────────────────────────────
-document.getElementById("run-btn").addEventListener("click", async () => {
-  const scraper = document.getElementById("scraper-select").value;
-  const dryRun  = document.getElementById("dry-run").checked;
-
-  // Cancel any existing SSE
-  if (activeSSE) { activeSSE.close(); activeSSE = null; }
-
-  clearLogs();
-  setBadge("running", "Running…");
-
-  const params = new URLSearchParams();
-  if (scraper)  params.set("scraper", scraper);
-  if (dryRun)   params.set("dry_run", "true");
-
-  let res;
-  try {
-    res = await fetch(`${API}/run?${params}`, { method: "POST" });
-  } catch (e) {
-    appendLog(`ERROR Could not reach server: ${e}`, "error");
-    setBadge("error", "Error");
-    return;
-  }
-
-  if (res.status === 409) {
-    appendLog("ERROR A run is already in progress.", "error");
-    setBadge("error", "Busy");
-    return;
-  }
-  if (!res.ok) {
-    appendLog(`ERROR Server returned ${res.status}`, "error");
-    setBadge("error", "Error");
-    return;
-  }
-
-  const { run_id } = await res.json();
-  activeRunId = run_id;
-  document.getElementById("log-title").textContent = `Logs — ${run_id}`;
-
-  await loadStatus();
-  streamLogs(run_id);
-});
-
-// ── SSE log streaming ─────────────────────────────────────────────────────────
-function streamLogs(runId) {
-  const sse = new EventSource(`${API}/run/${runId}/logs`);
-  activeSSE = sse;
-
-  sse.onmessage = (e) => {
-    const line = e.data;
-    if (line === "__DONE__") {
-      sse.close();
-      activeSSE = null;
-      setBadge("done", "Done");
-      loadStatus();
-      loadRuns();
+    if (!data.agents || data.agents.length === 0) {
+      agentSelect.innerHTML = '<option value="" disabled selected>No agents found</option>';
       return;
     }
-    const lvl = line.startsWith("ERROR") ? "error"
-              : line.startsWith("WARNING") ? "warn"
-              : line.startsWith("DEBUG")   ? "debug"
-              : "info";
-    appendLog(line, lvl);
-  };
 
-  sse.onerror = () => {
-    sse.close();
-    activeSSE = null;
-    setBadge("error", "Disconnected");
-  };
+    const placeholder = document.createElement('option');
+    placeholder.value    = '';
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    placeholder.textContent = 'Select an agent…';
+    agentSelect.appendChild(placeholder);
+
+    data.agents.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value       = name;
+      opt.textContent = name;
+      agentSelect.appendChild(opt);
+    });
+
+    agentSelect.addEventListener('change', () => {
+      startBtn.disabled = agentSelect.value === '';
+    });
+  } catch (err) {
+    agentSelect.innerHTML = '<option value="" disabled selected>Failed to load agents</option>';
+    console.error(err);
+  }
 }
 
-// ── Log helpers ───────────────────────────────────────────────────────────────
-function appendLog(text, level = "info") {
-  const pre = document.getElementById("log-output");
-  const span = document.createElement("span");
-  span.className = `line-${level}`;
-  span.textContent = text + "\n";
-  pre.appendChild(span);
-  pre.parentElement.scrollTop = pre.parentElement.scrollHeight;
+function setRunning(running) {
+  if (running) {
+    startBtn.disabled   = true;
+    startBtn.classList.add('running');
+    startBtn.innerHTML  = '<span class="spinner"></span>Running…';
+  } else {
+    startBtn.disabled   = false;
+    startBtn.classList.remove('running');
+    startBtn.textContent = 'Start';
+  }
 }
 
-function clearLogs() {
-  document.getElementById("log-output").innerHTML = "";
-  setBadge("", "");
-  document.getElementById("log-title").textContent = "Logs";
+function showOutput(text, isError = false) {
+  outputGroup.style.display = 'flex';
+  outputBox.classList.toggle('error', isError);
+  outputBox.textContent = text;
+  outputBox.scrollTop   = outputBox.scrollHeight;
 }
 
-function setBadge(cls, text) {
-  const b = document.getElementById("run-badge");
-  b.className = "badge " + cls;
-  b.textContent = text;
+function appendOutput(text) {
+  outputBox.textContent += text;
+  outputBox.scrollTop    = outputBox.scrollHeight;
 }
+
+startBtn.addEventListener('click', async () => {
+  const agent = agentSelect.value;
+  const input = inputText.value.trim();
+
+  if (!agent) return;
+
+  setRunning(true);
+  outputGroup.style.display = 'flex';
+  outputBox.classList.remove('error');
+  outputBox.textContent = '';
+
+  try {
+    const res = await fetch('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent, input }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      showOutput(`Error: ${err.detail || res.statusText}`, true);
+      setRunning(false);
+      return;
+    }
+
+    // Stream the response line by line
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      appendOutput(decoder.decode(value, { stream: true }));
+    }
+  } catch (err) {
+    showOutput(`Network error: ${err.message}`, true);
+  } finally {
+    setRunning(false);
+  }
+});
+
+loadAgents();

@@ -7,52 +7,27 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="layout">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <h1 class="logo">⚡ Agent Runner</h1>
+  <div class="container">
+    <h1>Agent Runner</h1>
 
-      <section class="card status-card">
-        <h2>Pipeline Status</h2>
-        <div class="stats" id="stats">
-          <div class="stat"><span id="stat-open">—</span><small>Open leads</small></div>
-          <div class="stat"><span id="stat-leads">—</span><small>Enriched</small></div>
-          <div class="stat"><span id="stat-total">—</span><small>Total jobs</small></div>
-        </div>
-      </section>
+    <div class="form-group">
+      <label for="agent-select">Agent</label>
+      <select id="agent-select">
+        <option value="" disabled selected>Loading agents…</option>
+      </select>
+    </div>
 
-      <section class="card">
-        <h2>Run Pipeline</h2>
-        <label class="field">
-          <span>Scraper (optional)</span>
-          <select id="scraper-select">
-            <option value="">All scrapers</option>
-          </select>
-        </label>
-        <label class="field checkbox-field">
-          <input type="checkbox" id="dry-run" />
-          <span>Dry run (no enrichment / sheet writes)</span>
-        </label>
-        <button id="run-btn" class="btn-primary">Run now</button>
-      </section>
+    <div class="form-group">
+      <label for="input-text">Input</label>
+      <textarea id="input-text" placeholder="Enter your input here…" rows="6"></textarea>
+    </div>
 
-      <section class="card">
-        <h2>Recent Runs</h2>
-        <ul class="run-list" id="run-list"></ul>
-      </section>
-    </aside>
+    <button id="start-btn" disabled>Start</button>
 
-    <!-- Main log panel -->
-    <main class="main">
-      <div class="log-header">
-        <h2 id="log-title">Logs</h2>
-        <span id="run-badge" class="badge"></span>
-        <button id="clear-btn" class="btn-ghost" onclick="clearLogs()">Clear</button>
-      </div>
-      <div class="log-wrap">
-        <pre id="log-output" class="log"></pre>
-      </div>
-    </main>
+    <div class="form-group output-group" id="output-group" style="display:none">
+      <label for="output-text">Output</label>
+      <div id="output-text" class="output-box"></div>
+    </div>
   </div>
 
   <script src="app.js"></script>
