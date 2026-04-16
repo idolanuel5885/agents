@@ -105,11 +105,14 @@ def parse_input_to_flags(user_input: str, help_text: str) -> list[str]:
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
     prompt = (
-        f"Convert this natural language request into CLI flags for the command below.\n"
+        f"Convert this natural language request into CLI arguments for the command below.\n"
         f"Request: \"{user_input}\"\n\n"
         f"CLI help output:\n{help_text}\n\n"
-        f"Reply with ONLY the flags (e.g. --dry-run --scraper himalayas), "
-        f"or reply with exactly (empty) if no flags are needed."
+        f"Rules:\n"
+        f"- Reply with ONLY the shell arguments, nothing else\n"
+        f"- Quote any multi-word positional arguments with double quotes (e.g. \"food trucks in the US\")\n"
+        f"- Named flags look like --flag value or --flag\n"
+        f"- Reply with exactly (empty) if no arguments are needed"
     )
     msg = client.messages.create(
         model="claude-haiku-4-5",

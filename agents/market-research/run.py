@@ -448,7 +448,7 @@ def main():
     )
     parser.add_argument(
         "industry",
-        nargs="?",
+        nargs="*",
         help='Industry or niche to research, e.g. "dental practices" or "food trucks"',
     )
     parser.add_argument(
@@ -467,7 +467,7 @@ def main():
         print("Error: ANTHROPIC_API_KEY is not set.", file=sys.stderr)
         sys.exit(1)
 
-    industry    = args.industry.strip()
+    industry    = " ".join(args.industry).strip()
     output_path = Path(args.output) if args.output else Path(__file__).parent / "market_research.xlsx"
     client      = anthropic.Anthropic(api_key=api_key)
 
