@@ -1,0 +1,15 @@
+python-jobspy>=0.1.0
+playwright>=1.40.0
+playwright-stealth>=1.0.6
+aiohttp>=3.9.0
+gspread>=5.12.0
+google-auth>=2.25.0
+google-auth-oauthlib>=1.0.0
+python-dotenv>=1.0.0
+rapidfuzz>=3.5.0
+httpx>=0.25.0
+sqlite-utils>=3.35
+rich>=13.0.0
+tenacity>=8.2.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0

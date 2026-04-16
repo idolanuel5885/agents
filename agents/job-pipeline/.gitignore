@@ -1,0 +1,21 @@
+# Secrets & credentials — never commit these
+.env
+credentials/
+
+# Database — too large and contains personal data
+pipeline.db
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Logs
+logs/
+
+# OS
+.DS_Store
