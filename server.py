@@ -88,7 +88,8 @@ async def run_agent(req: RunRequest):
     cmd        = [sys.executable, str(entry)]
 
     if req.input:
-        cmd += ["--input", req.input]
+        import shlex
+        cmd += shlex.split(req.input)
 
     async def stream():
         proc = await asyncio.create_subprocess_exec(
