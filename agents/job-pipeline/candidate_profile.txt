@@ -1,0 +1,102 @@
+CANDIDATE PROFILE: Ido Lanuel
+Contact: idolanuel@gmail.com | +1 802-692-9051
+
+════════════════════════════════════════════════
+WHO I AM
+════════════════════════════════════════════════
+Operator-first technology and product executive with 10+ years in B2B SaaS.
+BSc in Computer Science. Personally builds and ships AI solutions (not just
+"uses AI" — actual production agents and apps). Track record of building
+functions from scratch and tying everything to measurable outcomes.
+
+Unique combination: technical depth (CS degree, code-level background, current
+AI builder) + executive leadership (CEO, VP Product) + operator mindset (builds
+intake, prioritization, governance, delivery, measurement from zero).
+
+════════════════════════════════════════════════
+TARGET ROLES — STRONG FIT (score 7-10)
+════════════════════════════════════════════════
+• VP of Product / Director of Product Management at B2B SaaS
+• Chief Product Officer
+• VP/Director AI Strategy, AI Enablement, or AI Center of Excellence
+• Chief of Staff or COO (operator/execution focus, not pure finance)
+• Head of Product Operations or Platform
+• Senior technology executive reporting to CIO, CTO, or CEO
+• General Manager / Head of Business Unit at SaaS company
+• VP Customer Success or Solutions (product-adjacent, execution-heavy)
+
+IDEAL COMPANY PROFILE (score higher for these):
+• B2B SaaS, $10M–$200M ARR, growing
+• AI/workflow automation companies
+• HCM / HR technology (6 years deep domain expertise)
+• Nonprofit technology or social impact SaaS
+• Product-led or usage-led growth models
+• Companies that need someone to build a function from scratch
+• 50–1,000 employees (can work in structure without being buried by it)
+
+════════════════════════════════════════════════
+WEAK FIT — SCORE LOW (score 1-4)
+════════════════════════════════════════════════
+• Individual contributor engineering or developer roles
+• Non-tech companies or legacy/regulated industries (banking, government)
+• Pre-revenue or idea-stage startups with no product yet
+• Fortune 100 / mega-enterprise roles with heavy bureaucracy
+• Pure sales, marketing, or finance roles (not product/tech)
+• Junior or mid-level roles (PM without Senior/Director/VP)
+• Titles like "Product Manager" or "Senior PM" without director+ responsibility
+• Roles with no AI/automation component at very traditional companies
+
+════════════════════════════════════════════════
+SKILLS & EXPERTISE
+════════════════════════════════════════════════
+AI/Automation (hands-on builder):
+• n8n + OpenAI production agents
+• Claude, Claude Code, Claude Projects (daily use)
+• Cursor AI (shipped full mobile app)
+• Workflow automation design and deployment
+
+Product Leadership:
+• Roadmap ownership, prioritization frameworks, build/buy/defer decisions
+• Product-led growth, trial-to-paid, onboarding, adoption, retention
+• Cross-functional delivery (Engineering, Design, Legal, GTM)
+• Vendor evaluation and acquisition strategy
+
+Operations & Strategy:
+• Operating model design (intake → prioritization → delivery → measurement)
+• KPI/OKR design, accountability systems
+• Function building from zero
+• P&L ownership, CEO-level execution
+
+Technical Foundation:
+• BSc Computer Science (not just background — actively coding)
+• SQL, Python, Java (historical), now primary in AI-assisted development
+
+════════════════════════════════════════════════
+CAREER HISTORY
+════════════════════════════════════════════════
+2024–2025: Chief Executive Officer, One Heart
+  Digital education + subscription business. Full P&L. Built operating model
+  from scratch across product, marketing, sales, ops, legal, finance.
+  ~90% revenue growth. 2x+ subscription membership.
+
+2021–2023: VP Product Management, Bonterra / Network for Good
+  3-product nonprofit SaaS suite (CRM, Events, Auctions), ~6,000 US nonprofits.
+  Led 5 PMs. Contributed to ARR growth ~$20M → ~$40M. 50% upsell adoption.
+  ~20% activation improvement. ~10% retention improvement.
+  Promoted from Director to VP during acquisition.
+
+2015–2021: Director Product Management, Asure Software / iSystems
+  Full HCM suite (HR, Payroll, Time & Attendance, Workforce Analytics).
+  Coordinated 4 internal teams. 500%+ HR product adoption increase.
+  Churn reduced 20% → 8%. New monetization tier: +$3M ARR, 3,000% ROI yr1.
+  Led strategic vendor evaluation → selected partner HRNext (later acquired).
+
+2010–2015: Earlier Career (Product / Project / Engineering)
+  Mobile Apps Consultant, Founder (2BAware blog network), Software Dev (Tripodia)
+
+════════════════════════════════════════════════
+EDUCATION & CERTIFICATIONS
+════════════════════════════════════════════════
+BSc, Computer Science — IDC Herzliya (2010)
+PMP, Project Management Professional — PMI (2016)
+PMC6, Pragmatic Marketing Certification (2018)

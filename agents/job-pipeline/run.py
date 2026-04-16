@@ -35,6 +35,7 @@ def main():
     parser.add_argument("--scraper", type=str, help="Run only this scraper (by name)")
     parser.add_argument("--list-scrapers", action="store_true", help="Print scraper names and exit")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
+    parser.add_argument("--send-email", action="store_true", help="Send daily digest email after pipeline completes")
     args = parser.parse_args()
 
     if args.list_scrapers:
@@ -87,13 +88,16 @@ async def _run(args):
     scraper_names = [args.scraper] if args.scraper else None
 
     from pipeline.orchestrator import Pipeline
+    from config.settings import DB_PATH
     pipeline = Pipeline(scraper_names=scraper_names)
 
     if args.scrapers_only or DRY_RUN:
-        # Override to skip enrichment + export stages
         await _scrape_and_filter_only(pipeline)
     else:
-        await pipeline.run()
+        stats = await pipeline.run()
+        if args.send_email:
+            from email_digest import run_digest
+            run_digest(str(DB_PATH), pipeline_stats=stats)
 
 
 async def _scrape_and_filter_only(pipeline):
