@@ -29,15 +29,7 @@ class SheetsExporter:
         if self._worksheet:
             return
 
-        creds_path = Path(GOOGLE_SERVICE_ACCOUNT_JSON)
-        if not creds_path.exists():
-            raise FileNotFoundError(
-                f"Google service account JSON not found at {creds_path}. "
-                f"See README for setup instructions."
-            )
-        if not GOOGLE_SHEET_ID:
-            raise ValueError("GOOGLE_SHEET_ID is not set in .env")
-
+        import json as _json
         import gspread
         from gspread.http_client import BackOffHTTPClient
         from google.oauth2.service_account import Credentials
@@ -46,7 +38,22 @@ class SheetsExporter:
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive.file",
         ]
-        creds = Credentials.from_service_account_file(str(creds_path), scopes=scopes)
+
+        creds_source = GOOGLE_SERVICE_ACCOUNT_JSON.strip()
+        if creds_source.startswith("{"):
+            # Inline JSON content (Railway / cloud deployments)
+            creds = Credentials.from_service_account_info(
+                _json.loads(creds_source), scopes=scopes
+            )
+        else:
+            # File path (local development)
+            creds_path = Path(creds_source)
+            if not creds_path.exists():
+                raise FileNotFoundError(
+                    f"Google service account JSON not found at {creds_path}. "
+                    f"Set GOOGLE_SERVICE_ACCOUNT_JSON to the file path or paste the JSON content directly."
+                )
+            creds = Credentials.from_service_account_file(str(creds_path), scopes=scopes)
         gc = gspread.authorize(creds, http_client=BackOffHTTPClient)
         self._sheet = gc.open_by_key(GOOGLE_SHEET_ID)
 
