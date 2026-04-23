@@ -136,9 +136,13 @@ class Pipeline:
             async with sem:
                 log.info(f"  → Running {scraper.name}…")
                 try:
-                    jobs = await scraper.scrape()
+                    jobs = await asyncio.wait_for(scraper.scrape(), timeout=180)
                     log.info(f"  ✓ {scraper.name}: {len(jobs)} jobs")
                     return jobs
+                except asyncio.TimeoutError:
+                    log.error(f"  ✗ {scraper.name}: timed out after 180s")
+                    stats["errors"].append({"scraper": scraper.name, "error": "timeout"})
+                    return []
                 except Exception as e:
                     log.error(f"  ✗ {scraper.name}: {type(e).__name__}: {e}")
                     stats["errors"].append({"scraper": scraper.name, "error": str(e)})
@@ -156,9 +160,13 @@ class Pipeline:
             async with pw_sem:
                 log.info(f"  → Running {scraper.name} (Playwright)…")
                 try:
-                    jobs = await scraper.scrape()
+                    jobs = await asyncio.wait_for(scraper.scrape(), timeout=120)
                     log.info(f"  ✓ {scraper.name}: {len(jobs)} jobs")
                     return jobs
+                except asyncio.TimeoutError:
+                    log.error(f"  ✗ {scraper.name}: timed out after 120s")
+                    stats["errors"].append({"scraper": scraper.name, "error": "timeout"})
+                    return []
                 except Exception as e:
                     log.error(f"  ✗ {scraper.name}: {type(e).__name__}: {e}")
                     stats["errors"].append({"scraper": scraper.name, "error": str(e)})
