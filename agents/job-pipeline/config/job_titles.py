@@ -1,6 +1,7 @@
 # Exact target titles — used for fuzzy matching against scraped results.
 # The fuzzy threshold is 85/100 (rapidfuzz WRatio).
 TARGET_TITLES = [
+    # AI Leadership
     "Head of AI",
     "Head of AI Strategy",
     "Head of AI Strategy & Transformation",
@@ -24,8 +25,25 @@ TARGET_TITLES = [
     "GM Artificial Intelligence",
     "Head of AI Products",
     "Head of AI Enablement",
+    "Director of AI Enablement",
     "VP of AI Products",
     "VP of Artificial Intelligence",
+    "Head of AI Adoption",
+    "Head of Enterprise AI",
+    "Director of Enterprise AI",
+    "VP of Enterprise AI",
+    "Chief of AI",
+    "Chief AI Enablement Officer",
+    "AI Program Director",
+    "Head of AI Programs",
+    "Director of AI Programs",
+    "AI Center of Excellence Lead",
+    "Head of AI CoE",
+    "Director of AI CoE",
+    "Director of AI & Automation",
+    "Director of AI and Automation",
+
+    # Digital & Business Transformation
     "Director of Digital Transformation",
     "VP of Digital Transformation",
     "Vice President of Digital Transformation",
@@ -33,6 +51,19 @@ TARGET_TITLES = [
     "Director Digital Transformation",
     "VP Digital Transformation",
     "Head Digital Transformation",
+    "VP of Business Transformation",
+    "Director of Business Transformation",
+    "Head of Business Transformation",
+    "Head of Technology Transformation",
+    "Director of Technology Transformation",
+
+    # Automation & Innovation
+    "Head of Intelligent Automation",
+    "Director of Intelligent Automation",
+    "VP of Intelligent Automation",
+    "VP of Innovation",
+    "Director of Innovation",
+    "Head of Innovation",
 ]
 
 # If any of these strings appear in the scraped title it's an automatic
@@ -44,13 +75,28 @@ TITLE_INCLUDE_KEYWORDS = [
     "director of ai",
     "director ai",
     "chief ai",
+    "chief of ai",
     "caio",
     "gm of ai",
     "gm ai",
     "general manager ai",
     "head of artificial intelligence",
     "vp artificial intelligence",
+    "ai enablement",
+    "ai adoption",
+    "enterprise ai",
+    "ai program",
+    "ai center of excellence",
+    "ai coe",
+    "ai & automation",
+    "ai and automation",
     "digital transformation",
+    "business transformation",
+    "technology transformation",
+    "intelligent automation",
+    "head of innovation",
+    "vp of innovation",
+    "director of innovation",
 ]
 
 # Fuzzy match score threshold (0-100).
@@ -65,7 +111,16 @@ _SEARCH_TERMS = [
     "Director of AI Transformation",
     "Chief AI Officer",
     "GM of AI",
+    "Head of AI Enablement",
+    "Head of Enterprise AI",
+    "AI Program Director",
+    "AI Center of Excellence",
+    "Director of AI & Automation",
     "Head of Digital Transformation",
     "VP of Digital Transformation",
     "Director of Digital Transformation",
+    "VP of Business Transformation",
+    "Head of Intelligent Automation",
+    "VP of Innovation",
+    "Director of Innovation",
 ]
