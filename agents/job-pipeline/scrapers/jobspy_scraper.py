@@ -17,7 +17,7 @@ from config.settings import SCRAPER_PROXY
 
 log = logging.getLogger(__name__)
 
-_SITES = ["linkedin", "indeed", "glassdoor", "zip_recruiter"]
+_SITES = ["linkedin", "indeed"]  # glassdoor/zip_recruiter consistently blocked
 
 
 def _fmt_salary(sal_min, sal_max) -> str:
@@ -35,14 +35,23 @@ def _fmt_salary(sal_min, sal_max) -> str:
         return f"{_fmt(sal_min)}+"
     return f"Up to {_fmt(sal_max)}"
 
-# Search terms to submit — we combine a few key titles rather than all 20+
+# Search terms submitted to LinkedIn and Indeed
 _SEARCH_TERMS = [
     "Head of AI",
     "VP of AI",
-    "VP AI Strategy",
-    "Director of AI Transformation",
+    "Director of AI",
     "Chief AI Officer",
-    "GM of AI",
+    "Head of AI Enablement",
+    "Director of AI Enablement",
+    "Head of Enterprise AI",
+    "AI Program Director",
+    "Head of Intelligent Automation",
+    "VP of Business Transformation",
+    "VP of Innovation",
+    "Director of Innovation",
+    "Head of Digital Transformation",
+    "VP of Digital Transformation",
+    "Director of Digital Transformation",
 ]
 
 

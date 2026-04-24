@@ -136,11 +136,11 @@ class Pipeline:
             async with sem:
                 log.info(f"  → Running {scraper.name}…")
                 try:
-                    jobs = await asyncio.wait_for(scraper.scrape(), timeout=180)
+                    jobs = await asyncio.wait_for(scraper.scrape(), timeout=360)
                     log.info(f"  ✓ {scraper.name}: {len(jobs)} jobs")
                     return jobs
                 except asyncio.TimeoutError:
-                    log.error(f"  ✗ {scraper.name}: timed out after 180s")
+                    log.error(f"  ✗ {scraper.name}: timed out after 360s")
                     stats["errors"].append({"scraper": scraper.name, "error": "timeout"})
                     return []
                 except Exception as e:
