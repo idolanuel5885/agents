@@ -3,8 +3,10 @@ Google Sheets exporter.
 Appends new jobs, marks closed jobs, sorts by date, and applies flag formatting.
 """
 
+import hashlib
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -86,6 +88,100 @@ class SheetsExporter:
                     self._last_data_row = max(self._last_data_row, i)
         except Exception as e:
             log.warning(f"[sheets] Could not index existing rows: {e}")
+
+    def seed_db(self) -> int:
+        """
+        Re-hydrate the local SQLite DB from existing sheet rows.
+
+        Called at pipeline start on ephemeral filesystems (Railway cron).  The
+        sheet becomes the persistent store: job history, stale-detection
+        timestamps, and hiring-manager data all flow back into the fresh DB so
+        the rest of the pipeline behaves identically to a local run with a
+        persisted DB.
+
+        Skips immediately when the DB already has data (local / non-ephemeral
+        runs) so there is zero overhead for the common case.
+
+        Returns the number of rows seeded.
+        """
+        from db import database as db
+
+        if not db.is_db_fresh():
+            return 0
+
+        try:
+            self._connect()
+        except Exception as e:
+            log.warning(f"[sheets] seed_db: cannot connect to sheet — {e}")
+            return 0
+
+        all_values = self._worksheet.get_all_values()
+        if len(all_values) <= 1:
+            return 0
+
+        seeded = 0
+        for row in all_values[1:]:  # skip header row
+            # Pad short rows so zip always produces all columns
+            if len(row) < len(HEADERS):
+                row = row + [""] * (len(HEADERS) - len(row))
+
+            r = dict(zip(HEADERS, row))
+            apply_url = r.get("Apply URL", "").strip()
+            if not apply_url:
+                continue
+
+            title   = r.get("Job Title", "").strip()
+            company = r.get("Company", "").strip()
+
+            # Reconstruct the stable job ID (must match RawJob.id)
+            key    = f"{company.lower().strip()}|{title.lower().strip()}|{apply_url.lower().strip()}"
+            job_id = hashlib.sha256(key.encode()).hexdigest()[:32]
+
+            last_seen = _parse_sheet_timestamp(r.get("Last Updated", ""))
+
+            status = r.get("Status", "Open").lower().strip()
+            if status not in ("open", "closed"):
+                status = "open"
+
+            db.seed_job_from_sheet({
+                "id":               job_id,
+                "title":            title,
+                "company":          company,
+                "apply_url":        apply_url,
+                "source":           r.get("Job Board Source", "").strip() or "sheet",
+                "location":         r.get("Location", ""),
+                "is_remote":        1 if r.get("Remote?", "").lower() == "yes" else 0,
+                "date_posted":      r.get("Date Posted", ""),
+                "salary_raw":       r.get("Salary", ""),
+                "company_size_raw": r.get("Company Size (employees)", ""),
+                "status":           status,
+                "last_seen":        last_seen,
+            })
+
+            # Seed lead data so enriched jobs aren't re-queried against Hunter
+            mgr_name  = r.get("Hiring Manager Name", "").strip()
+            mgr_email = r.get("Email", "").strip()
+            if mgr_name or mgr_email:
+                conf_raw = r.get("Email Confidence", "").replace("%", "").strip()
+                try:
+                    conf = int(float(conf_raw)) if conf_raw else None
+                except ValueError:
+                    conf = None
+
+                db.seed_lead_from_sheet({
+                    "job_id":                job_id,
+                    "hiring_manager_name":   mgr_name or None,
+                    "hiring_manager_title":  r.get("Hiring Manager Title", "").strip() or None,
+                    "linkedin_url":          r.get("LinkedIn URL", "").strip() or None,
+                    "email":                 mgr_email or None,
+                    "email_confidence":      conf,
+                    "enriched_at":           last_seen,
+                })
+
+            seeded += 1
+
+        log.info(f"[sheets] Seeded {seeded} historical jobs from sheet into fresh DB")
+        return seeded
 
     def sync(self, jobs: list[dict]) -> dict:
         """
@@ -243,3 +339,25 @@ def _fmt_salary(job: dict) -> str:
         return f"Up to {_fmt(sal_max)}"
 
     return job.get("salary_raw", "")
+
+
+def _parse_sheet_timestamp(ts: str) -> str:
+    """
+    Convert the sheet's "Last Updated" value ("2024-01-15 10:30 UTC") to an
+    ISO 8601 UTC string suitable for SQLite comparisons.
+
+    Falls back to 7 days ago so that unrecognised / blank entries are eligible
+    for stale detection on the very next run — preventing them from lingering
+    in the sheet as perpetually-open orphans.
+    """
+    if ts:
+        m = re.match(r"(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})", ts)
+        if m:
+            try:
+                dt = datetime.strptime(
+                    f"{m.group(1)} {m.group(2)}", "%Y-%m-%d %H:%M"
+                ).replace(tzinfo=timezone.utc)
+                return dt.isoformat()
+            except ValueError:
+                pass
+    return (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()

@@ -38,6 +38,14 @@ class Pipeline:
     async def run(self) -> dict:
         run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         db.init_db()
+
+        # On ephemeral filesystems (Railway cron) the DB is always fresh.
+        # Re-seed it from the sheet so stale-detection, deduplication, and
+        # enrichment-skipping all work as if the DB had been persisted.
+        seeded = self._exporter.seed_db()
+        if seeded:
+            log.info(f"Re-seeded {seeded} historical jobs from sheet into fresh DB")
+
         db.start_run(run_id)
 
         stats = {

@@ -218,6 +218,69 @@ def update_sheet_row(job_id: str, row_num: int) -> None:
         )
 
 
+def is_db_fresh() -> bool:
+    """True when the jobs table is empty — signals an ephemeral/cron filesystem."""
+    with get_conn() as conn:
+        return conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 0
+
+
+def seed_job_from_sheet(job: dict) -> None:
+    """
+    Insert a job record reconstructed from the Google Sheet.
+    Skips silently if the ID already exists so a live scrape result is never
+    overwritten.  All seeded rows are marked passed_filters=1 (they were
+    already vetted when originally exported to the sheet).
+    """
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM jobs WHERE id = ?", (job["id"],)).fetchone():
+            return
+        conn.execute(
+            """
+            INSERT INTO jobs
+            (id, title, company, apply_url, source, location, is_remote,
+             date_posted, salary_raw, company_size_raw, status,
+             passed_filters, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            """,
+            (
+                job["id"], job.get("title", ""), job.get("company", ""),
+                job.get("apply_url", ""), job.get("source", "sheet"),
+                job.get("location", ""), job.get("is_remote", 0),
+                job.get("date_posted", ""), job.get("salary_raw", ""),
+                job.get("company_size_raw", ""), job.get("status", "open"),
+                job["last_seen"], job["last_seen"],
+            ),
+        )
+
+
+def seed_lead_from_sheet(lead: dict) -> None:
+    """Insert a lead record reconstructed from the Google Sheet."""
+    if not lead.get("job_id"):
+        return
+    with get_conn() as conn:
+        if conn.execute(
+            "SELECT 1 FROM leads WHERE job_id = ?", (lead["job_id"],)
+        ).fetchone():
+            return
+        conn.execute(
+            """
+            INSERT INTO leads
+            (job_id, hiring_manager_name, hiring_manager_title,
+             linkedin_url, email, email_confidence, enriched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                lead["job_id"],
+                lead.get("hiring_manager_name"),
+                lead.get("hiring_manager_title"),
+                lead.get("linkedin_url"),
+                lead.get("email"),
+                lead.get("email_confidence"),
+                lead.get("enriched_at"),
+            ),
+        )
+
+
 # ── Company cache ─────────────────────────────────────────────────────────────
 
 def get_cached_company(domain: str) -> Optional[dict]:
