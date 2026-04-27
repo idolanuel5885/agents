@@ -102,7 +102,15 @@ class Pipeline:
         log.info("Stage 4: Exporting to Google Sheets…")
         all_jobs = db.get_all_for_export()
         sheet_stats = self._exporter.sync(all_jobs)
-        log.info(f"Stage 4 complete: {sheet_stats}")
+        if "error" in sheet_stats:
+            log.error(
+                f"[sheets] EXPORT FAILED: {sheet_stats['error']}\n"
+                "  → Ensure GOOGLE_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON are set "
+                "in this service's environment variables."
+            )
+            stats["errors"].append({"stage": "export", "error": sheet_stats["error"]})
+        else:
+            log.info(f"Stage 4 complete: {sheet_stats}")
 
         # ── Finish ───────────────────────────────────────────────────────────
         db.finish_run(run_id, stats)

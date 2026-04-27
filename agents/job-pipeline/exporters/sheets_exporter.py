@@ -94,7 +94,7 @@ class SheetsExporter:
         """
         if DRY_RUN:
             log.info(f"[sheets] DRY RUN — would sync {len(jobs)} jobs (no sheet writes)")
-            return {"new": 0, "updated": 0, "closed": 0, "skipped": len(jobs)}
+            return {"new": 0, "updated": 0, "skipped": len(jobs)}
 
         try:
             self._connect()
@@ -102,9 +102,8 @@ class SheetsExporter:
             log.error(f"[sheets] Cannot connect to Google Sheets: {e}")
             return {"error": str(e)}
 
-        stats = {"new": 0, "updated": 0, "closed": 0, "skipped": 0}
+        stats = {"new": 0, "updated": 0, "skipped": 0}
         new_rows: list[list] = []
-        current_urls: set[str] = set()
         # Collect all cell updates to issue as one batch_update call
         batch_updates: list[dict] = []
         now = _now()
@@ -115,7 +114,6 @@ class SheetsExporter:
                 stats["skipped"] += 1
                 continue
 
-            current_urls.add(url)
             row_data = self._job_to_row(job)
 
             if url in self._existing_urls:
@@ -135,22 +133,6 @@ class SheetsExporter:
             else:
                 new_rows.append(row_data)
                 stats["new"] += 1
-
-        # Mark closed: jobs in sheet but not in current export
-        for url, row_num in self._existing_urls.items():
-            if url not in current_urls:
-                status_col = COL_IDX["Status"] + 1
-                updated_col = COL_IDX["Last Updated"] + 1
-                # Only mark closed if not already closed (check via existing batch)
-                batch_updates.append({
-                    "range": f"R{row_num}C{status_col}",
-                    "values": [["Closed"]],
-                })
-                batch_updates.append({
-                    "range": f"R{row_num}C{updated_col}",
-                    "values": [[now]],
-                })
-                stats["closed"] += 1
 
         # Single batch_update for all cell changes (1 API call instead of N*2)
         if batch_updates:
@@ -186,8 +168,7 @@ class SheetsExporter:
                         log.error(f"[sheets] update (new rows) failed: {e}")
 
         log.info(
-            f"[sheets] Sync complete — new={stats['new']}, "
-            f"updated={stats['updated']}, closed={stats['closed']}"
+            f"[sheets] Sync complete — new={stats['new']}, updated={stats['updated']}"
         )
         return stats
 
