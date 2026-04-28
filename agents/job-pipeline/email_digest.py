@@ -180,6 +180,23 @@ def build_html(jobs: list[dict], pipeline_stats: dict) -> str:
     new_ct   = pipeline_stats.get("jobs_new", total)
     enriched = pipeline_stats.get("enriched", "—")
 
+    sheet_stats  = pipeline_stats.get("sheet_stats", {})
+    sheet_error  = sheet_stats.get("error") if isinstance(sheet_stats, dict) else None
+    sheet_new    = sheet_stats.get("new", "—") if isinstance(sheet_stats, dict) else "—"
+    sheet_update = sheet_stats.get("updated", "—") if isinstance(sheet_stats, dict) else "—"
+
+    sheet_banner = ""
+    if sheet_error:
+        sheet_banner = f"""
+<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;
+            padding:14px 18px;margin-bottom:20px;color:#991b1b;font-size:13px">
+  <strong>⚠ Google Sheets export failed</strong><br>
+  {sheet_error}<br>
+  <span style="color:#b91c1c">Check that the service account has <strong>Editor</strong>
+  access to the spreadsheet, and that GOOGLE_SHEET_ID / GOOGLE_SERVICE_ACCOUNT_JSON
+  are set correctly in the cron service's environment variables.</span>
+</div>"""
+
     stats_bar = f"""
 <div style="display:flex;gap:40px;background:#f8fafc;border-radius:10px;padding:20px 24px;margin-bottom:28px">
   <div><div style="font-size:28px;font-weight:700;color:#1e293b">{total}</div>
@@ -190,6 +207,8 @@ def build_html(jobs: list[dict], pipeline_stats: dict) -> str:
        <div style="color:#94a3b8;font-size:13px">total scraped</div></div>
   <div><div style="font-size:28px;font-weight:700;color:#94a3b8">{enriched}</div>
        <div style="color:#94a3b8;font-size:13px">contacts found</div></div>
+  <div><div style="font-size:28px;font-weight:700;color:{'#ef4444' if sheet_error else '#94a3b8'}">{sheet_new if not sheet_error else '✗'}</div>
+       <div style="color:#64748b;font-size:13px">added to sheet</div></div>
 </div>"""
 
     top_section = ""
@@ -224,6 +243,7 @@ def build_html(jobs: list[dict], pipeline_stats: dict) -> str:
     <p style="color:#64748b;margin:4px 0 0;font-size:14px">{today}</p>
   </div>
 
+  {sheet_banner}
   {stats_bar}
   {no_jobs_msg}
   {top_section}
