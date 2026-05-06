@@ -103,11 +103,11 @@ def floor_ord(n: int) -> str:
 
 
 def rights_display(rt: RightsType) -> str:
-    return {
-        RightsType.PRIVATE: "בעלות פרטית",
-        RightsType.LEASE_RAMI: "זכות חכירה מהוונת מרשות מקרקעי ישראל",
-        RightsType.LEASE_COMPANY: "זכות חוזית לחכירה מחברה משכנת",
-    }[rt]
+    return skill_loader.get({
+        RightsType.PRIVATE: "rights.private",
+        RightsType.LEASE_RAMI: "rights.lease_rami",
+        RightsType.LEASE_COMPANY: "rights.lease_company",
+    }[rt])
 
 
 def purpose_display(p: ReportPurpose) -> str:
@@ -209,39 +209,48 @@ def _section_01_title(doc: Document, d: PropertyInput):
 
 def _section_02_details_table(doc: Document, d: PropertyInput):
     """טבלת פרטי הנכס"""
-    add_heading(doc, "פרטי הנכס", level=2)
+    add_heading(doc, skill_loader.get("section_02.heading"), level=2)
 
     floor_o = floor_ord(d.floor)
-    apt_desc = f"דירת {d.rooms} חדרים הממוקמת בקומה ה-{floor_o}"
+    apt_desc = skill_loader.render("section_02.apt_desc", rooms=d.rooms, floor_ord=floor_o)
 
     attachments = []
     if d.has_parking:
-        attachments.append(d.parking_description or "חניה")
+        attachments.append(d.parking_description
+                           or skill_loader.get("section_02.attachment.parking_default"))
     if d.has_storage:
-        attachments.append(d.storage_description or "מחסן")
+        attachments.append(d.storage_description
+                           or skill_loader.get("section_02.attachment.storage_default"))
     if d.has_garden:
-        attachments.append(f"גינה ({d.garden_area:.0f} מ\"ר)")
+        attachments.append(skill_loader.render(
+            "section_02.attachment.garden", garden_area=d.garden_area))
 
     rows = [
-        ("מטרת חוות הדעת", purpose_display(d.report_purpose), False),
-        ("מזמין חוות הדעת", d.client_name, False),
-        ("בעלי הזכויות בנכס", d.rights_owner, False),
-        ("המועד הקובע", d.determining_date, False),
-        ("מועד הביקור בנכס", d.visit_date, False),
-        ("גוש", d.block, False),
-        ("חלקה", d.parcel, False),
-        ("תת חלקה", d.sub_parcel, False),
-        ("הבניין בשלמות",
-         f"בניין מגורים בן {d.total_floors} קומות מעל קומת כניסה הכולל {d.units_count} יח\"ד",
+        (skill_loader.get("section_02.label.purpose"), purpose_display(d.report_purpose), False),
+        (skill_loader.get("section_02.label.client"), d.client_name, False),
+        (skill_loader.get("section_02.label.rights_owner"), d.rights_owner, False),
+        (skill_loader.get("section_02.label.determining_date"), d.determining_date, False),
+        (skill_loader.get("section_02.label.visit_date"), d.visit_date, False),
+        (skill_loader.get("section_02.label.block"), d.block, False),
+        (skill_loader.get("section_02.label.parcel"), d.parcel, False),
+        (skill_loader.get("section_02.label.sub_parcel"), d.sub_parcel, False),
+        (skill_loader.get("section_02.label.building"),
+         skill_loader.render(
+             "section_02.building_desc",
+             total_floors=d.total_floors, units_count=d.units_count,
+         ),
          False),
-        ("הדירה שבנדון", apt_desc, True),   # bold
-        ("שטח דירה רשום", f"{d.registered_area:.0f} מ\"ר", False),
-        ("שטח דירה בנוי", f"כ- {d.built_area:.0f} מ\"ר", False),
-        ("מיקום", d.address, False),
-        ("זכויות", rights_display(d.rights_type), False),
+        (skill_loader.get("section_02.label.apartment"), apt_desc, True),
+        (skill_loader.get("section_02.label.registered_area"),
+         skill_loader.render("section_02.value.registered_area", area=d.registered_area), False),
+        (skill_loader.get("section_02.label.built_area"),
+         skill_loader.render("section_02.value.built_area", area=d.built_area), False),
+        (skill_loader.get("section_02.label.location"), d.address, False),
+        (skill_loader.get("section_02.label.rights"), rights_display(d.rights_type), False),
     ]
     if attachments:
-        rows.append(("הצמדות", ", ".join(attachments), False))
+        rows.append((skill_loader.get("section_02.label.attachments"),
+                     ", ".join(attachments), False))
 
     tbl = make_table(doc, len(rows), 2, col_widths_cm=[4.5, 11.5])
     for i, (label, value, bold_val) in enumerate(rows):
