@@ -388,50 +388,49 @@ def _section_03_description(doc: Document, d: PropertyInput):
 
 def _section_04_planning(doc: Document, d: PropertyInput):
     """הרקע התכנוני"""
-    add_heading(doc, "הרקע התכנוני")
-    add_heading(doc, "א. תוכניות מתאר", level=2)
+    add_heading(doc, skill_loader.get("section_04.heading"))
+    add_heading(doc, skill_loader.get("section_04.plans.heading"), level=2)
 
     if not d.planning_plans:
-        add_para(doc, "יש להשלים")
+        add_para(doc, skill_loader.get("common.placeholder.todo"))
     else:
         for plan in d.planning_plans:
             add_para(
                 doc,
-                f"בהתאם לתוכנית מתאר מקומית מספר {plan.plan_number}, "
-                f"אשר פורסמה למתן תוקף בילקוט פרסומים מספר {plan.gazette_number} "
-                f"מתאריך {plan.gazette_date}, "
-                f"החלקה שבנדון סווגה ביעוד \"{plan.zoning}\"."
+                skill_loader.render(
+                    "section_04.plan.entry",
+                    plan_number=plan.plan_number,
+                    gazette_number=plan.gazette_number,
+                    gazette_date=plan.gazette_date,
+                    zoning=plan.zoning,
+                )
             )
             if plan.notes:
                 add_para(doc, plan.notes)
 
-    add_heading(doc, "ב. רישוי", level=2)
-    add_para(
-        doc,
-        "בתיק הבניין של הנכס שבנדון אותרו, בין היתר, "
-        "המסמכים הרלוונטיים הבאים:"
-    )
+    add_heading(doc, skill_loader.get("section_04.permit.heading"), level=2)
+    add_para(doc, skill_loader.get("section_04.permit.intro"))
 
     if not d.has_original_permit:
-        add_bullet(doc, "לא אותר היתר הבנייה המקורי של הבניין. יש להשלים.")
+        add_bullet(doc, skill_loader.get("section_04.permit.missing"))
     else:
-        permit_num = _opt(d.building_permit_number, 'מספר היתר')
-        permit_date = _opt(d.building_permit_date, 'תאריך היתר')
-        permit_allowed = _opt(d.building_permit_allowed, 'מה הותר')
         add_bullet(
             doc,
-            f"היתר בנייה מספר {permit_num} "
-            f"מתאריך {permit_date}, "
-            f"אשר התיר {permit_allowed}."
+            skill_loader.render(
+                "section_04.permit.entry",
+                permit_number=_opt(d.building_permit_number, 'מספר היתר'),
+                permit_date=_opt(d.building_permit_date, 'תאריך היתר'),
+                permit_allowed=_opt(d.building_permit_allowed, 'מה הותר'),
+            )
         )
         if d.has_completion_cert:
-            add_bullet(doc, f"תעודת גמר מתאריך {_opt(d.completion_cert_date, 'תאריך תעודת גמר')}.")
+            add_bullet(doc, skill_loader.render(
+                "section_04.permit.completion",
+                date=_opt(d.completion_cert_date, 'תאריך תעודת גמר'),
+            ))
 
     if d.balcony_closed_without_permit:
-        add_para(
-            doc,
-            "ככלל הדירה בנויה בהתאם להיתר אולם לא אותר היתר לסגירת המרפסת."
-        )
+        add_para(doc, skill_loader.get("section_04.permit.balcony_closed"))
 
     imgs = [b for t, b in d.planning_images if t == "04"]
     _embed_images(doc, imgs)
