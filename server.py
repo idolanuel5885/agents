@@ -28,6 +28,12 @@ AGENTS_DIR  = BASE_DIR / "agents"
 
 app = FastAPI(title="Agent Runner")
 
+# Real-estate appraisal report web UI
+import sys
+sys.path.insert(0, str(BASE_DIR))
+from real_estate.web import router as shuma_router
+app.include_router(shuma_router)
+
 
 # ---------------------------------------------------------------------------
 # Static UI

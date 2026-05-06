@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>מערכת שמאות מקרקעין — הפקת דוח</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+      background: #eef1f7;
+      color: #1a202c;
+      direction: rtl;
+      font-size: 15px;
+      line-height: 1.55;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .page-header {
+      background: linear-gradient(135deg, #1c3557 0%, #2d5986 100%);
+      color: #fff;
+      padding: 36px 24px 30px;
+      text-align: center;
+    }
+    .page-header h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+    .page-header p  { font-size: 14px; opacity: .82; margin-bottom: 10px; }
+    .header-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,.15);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 13px;
+    }
+    .req-star-inline { color: #fca5a5; font-weight: 700; }
+
+    /* ── Layout ── */
+    .container { max-width: 880px; margin: 28px auto 60px; padding: 0 16px; }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 22px 26px 26px;
+      margin-bottom: 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.04);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      padding-bottom: 13px;
+      border-bottom: 2px solid #e8edf8;
+    }
+    .card-header h2   { font-size: 16px; font-weight: 700; color: #1c3557; }
+    .badge-opt {
+      font-size: 11.5px;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 2px 9px;
+      border-radius: 99px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-cond {
+      font-size: 11.5px;
+      background: #fef9c3;
+      color: #92400e;
+      padding: 2px 9px;
+      border-radius: 99px;
+      font-weight: 600;
+    }
+
+    /* ── Grid ── */
+    .fg { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .fg-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 620px) {
+      .fg, .fg-3 { grid-template-columns: 1fr; }
+    }
+    .full  { grid-column: 1 / -1; }
+
+    /* ── Field ── */
+    .f { display: flex; flex-direction: column; gap: 5px; }
+    .f label { font-size: 13.5px; font-weight: 600; color: #374151; }
+    .req-star { color: #dc2626; margin-right: 2px; }
+
+    .f input, .f select, .f textarea {
+      padding: 9px 12px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14.5px;
+      font-family: inherit;
+      direction: rtl;
+      background: #fff;
+      transition: border-color .15s, box-shadow .15s;
+      color: #1a202c;
+    }
+    .f input:focus, .f select:focus, .f textarea:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+    }
+    .f.err input, .f.err select, .f.err textarea {
+      border-color: #dc2626;
+      background: #fff5f5;
+    }
+    .f.err input:focus, .f.err select:focus {
+      box-shadow: 0 0 0 3px rgba(220,38,38,.12);
+    }
+    .err-msg {
+      font-size: 12.5px;
+      color: #dc2626;
+      display: none;
+    }
+    .f.err .err-msg { display: block; }
+    .hint { font-size: 12px; color: #6b7280; }
+
+    /* ── Checkboxes ── */
+    .cb-group { display: flex; gap: 20px; flex-wrap: wrap; padding-top: 2px; }
+    .cb-item {
+      display: flex; align-items: center; gap: 7px;
+      cursor: pointer; font-size: 14.5px; font-weight: 500;
+    }
+    .cb-item input[type="checkbox"] {
+      width: 17px; height: 17px; cursor: pointer; accent-color: #2563eb;
+    }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: #e5e7eb; margin: 18px 0; }
+
+    /* ── Submit ── */
+    .submit-bar {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0 0;
+    }
+    .btn-gen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+      color: #fff;
+      border: none;
+      padding: 14px 60px;
+      font-size: 17px;
+      font-weight: 700;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform .12s, box-shadow .15s, background .15s;
+      box-shadow: 0 4px 14px rgba(37,99,235,.38);
+      min-width: 220px;
+    }
+    .btn-gen:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 22px rgba(37,99,235,.45);
+    }
+    .btn-gen:active:not(:disabled) { transform: translateY(0); }
+    .btn-gen:disabled {
+      background: #93c5fd;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2.5px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .65s linear infinite;
+      display: none;
+    }
+    .btn-gen.loading .spinner { display: block; }
+    .btn-gen.loading .btn-icon { display: none; }
+
+    /* ── Success toast ── */
+    #toast {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      width: 100%;
+      justify-content: center;
+    }
+    #toast.show { display: flex; }
+
+    /* ── Section hidden ── */
+    .hidden { display: none !important; }
+
+    /* ── Number inputs - keep LTR for typing ── */
+    input[type="number"] { direction: ltr; text-align: right; }
+    input[type="date"]   { direction: ltr; text-align: right; }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>🏢 מערכת שמאות מקרקעין</h1>
+  <p>מלא את פרטי הנכס ולחץ על "הפק דוח" לקבלת קובץ וורד מוכן להורדה</p>
+  <div class="header-note">
+    <span class="req-star-inline">*</span> שדות חובה מסומנים בכוכבית — שאר השדות אופציונליים
+  </div>
+</div>
+
+<div class="container">
+<form id="form" novalidate>
+
+  <!-- ═══════════════════════════════════════════════════════ 01 -->
+  <div class="card">
+    <div class="card-header"><h2>מטרת הדוח ופרטי הלקוח</h2></div>
+    <div class="fg">
+
+      <div class="f" id="f-purpose">
+        <label>מטרת חוות הדעת <span class="req-star">*</span></label>
+        <select id="purpose" name="purpose">
+          <option value="">— בחר —</option>
+          <option value="שוק">שוק — אומדן שווי שוק</option>
+          <option value="תקן_19">תקן 19 — בטוחה למתן אשראי</option>
+          <option value="פינוי_בינוי">פינוי-בינוי</option>
+        </select>
+        <span class="err-msg">נא לבחור מטרת חוות הדעת</span>
+      </div>
+
+      <div class="f" id="f-rights">
+        <label>סוג הזכויות <span class="req-star">*</span></label>
+        <select id="rights_type" name="rights_type">
+          <option value="">— בחר —</option>
+          <option value="בעלות_פרטית">בעלות פרטית</option>
+          <option value="חכירה_רמי">חכירה מרמ"י</option>
+          <option value="חכירה_חברה">חכירה מחברה משכנת</option>
+        </select>
+        <span class="err-msg">נא לבחור סוג זכויות</span>
+      </div>
+
+      <div class="f" id="f-gender">
+        <label>תואר הלקוח <span class="req-star">*</span></label>
+        <select id="client_gender" name="client_gender">
+          <option value="">— בחר —</option>
+          <option value="זכר">מר</option>
+          <option value="נקבה">גב'</option>
+          <option value="חברה">חברה בע"מ</option>
+          <option value="בנק">בנק</option>
+        </select>
+        <span class="err-msg">נא לבחור תואר</span>
+      </div>
+
+      <div class="f" id="f-name">
+        <label>שם הלקוח <span class="req-star">*</span></label>
+        <input type="text" id="client_name" name="client_name" placeholder="ישראל ישראלי">
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ 02 -->
+  <div class="card">
+    <div class="card-header"><h2>זיהוי הנכס</h2></div>
+    <div class="fg">
+
+      <div class="f full" id="f-address">
+        <label>כתובת מלאה <span class="req-star">*</span></label>
+        <input type="text" id="address" name="address" placeholder="רחוב הרצל 1, תל אביב">
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+      <div class="f" id="f-block">
+        <label>גוש <span class="req-star">*</span></label>
+        <input type="text" id="block" name="block" placeholder="6130">
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+      <div class="f" id="f-parcel">
+        <label>חלקה <span class="req-star">*</span></label>
+        <input type="text" id="parcel" name="parcel" placeholder="27">
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+      <div class="f" id="f-sub">
+        <label>תת חלקה <span class="req-star">*</span></label>
+        <input type="text" id="sub_parcel" name="sub_parcel" placeholder="8">
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ 03 -->
+  <div class="card">
+    <div class="card-header"><h2>פרטי הדירה</h2></div>
+    <div class="fg">
+
+      <div class="f" id="f-rooms">
+        <label>מספר חדרים <span class="req-star">*</span></label>
+        <input type="number" id="rooms" name="rooms" min="1" max="20" step="0.5" placeholder="4">
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+      <div class="f" id="f-floor">
+        <label>קומה <span class="req-star">*</span></label>
+        <input type="number" id="floor" name="floor" min="0" max="100" placeholder="3">
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+      <div class="f" id="f-reg-area">
+        <label>שטח רשום (מ"ר) <span class="req-star">*</span></label>
+        <input type="number" id="registered_area" name="registered_area" min="0" step="0.5" placeholder="94">
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+      <div class="f" id="f-built-area">
+        <label>שטח בנוי (מ"ר) <span class="req-star">*</span></label>
+        <input type="number" id="built_area" name="built_area" min="0" step="0.5" placeholder="92">
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+      <div class="f">
+        <label>שטח מרפסת (מ"ר)</label>
+        <input type="number" id="balcony_area" name="balcony_area" min="0" step="0.5" placeholder="0">
+      </div>
+
+      <div class="f">
+        <label>גובה פנים (מ')</label>
+        <input type="number" id="ceiling_height" name="ceiling_height" min="2" max="6" step="0.1" placeholder="2.70">
+      </div>
+
+      <div class="f">
+        <label>כיווני אוויר</label>
+        <input type="text" id="air_directions" name="air_directions" placeholder="מזרח ומערב">
+      </div>
+
+      <div class="f">
+        <label>רמת גמר</label>
+        <select id="finish_level" name="finish_level">
+          <option value="">— לא צוין —</option>
+          <option value="בסיסית">בסיסית</option>
+          <option value="טובה" selected>טובה</option>
+          <option value="טובה מאוד">טובה מאוד</option>
+        </select>
+      </div>
+
+      <div class="f full">
+        <label>הצמדות</label>
+        <div class="cb-group">
+          <label class="cb-item">
+            <input type="checkbox" id="has_parking" name="has_parking">
+            <span>חניה</span>
+          </label>
+          <label class="cb-item">
+            <input type="checkbox" id="has_storage" name="has_storage">
+            <span>מחסן</span>
+          </label>
+          <label class="cb-item">
+            <input type="checkbox" id="has_garden" name="has_garden">
+            <span>גינה</span>
+          </label>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ 04 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>פרטי הבניין</h2>
+      <span class="badge-opt">אופציונלי</span>
+    </div>
+    <div class="fg-3">
+
+      <div class="f">
+        <label>שנת בנייה</label>
+        <input type="number" id="build_year" name="build_year" min="1900" max="2025" placeholder="1985">
+      </div>
+
+      <div class="f">
+        <label>מספר קומות בבניין</label>
+        <input type="number" id="total_floors" name="total_floors" min="1" max="100" placeholder="8">
+      </div>
+
+      <div class="f">
+        <label>מספר יחידות דיור</label>
+        <input type="number" id="units_count" name="units_count" min="1" placeholder="32">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ 05 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>פרטי שכירות</h2>
+      <span class="badge-opt">אופציונלי</span>
+    </div>
+    <div class="fg">
+
+      <div class="f">
+        <label>שם השוכר</label>
+        <input type="text" id="tenant_name" name="tenant_name" placeholder="שם השוכר">
+      </div>
+
+      <div class="f">
+        <label>דמי שכירות לחודש (₪)</label>
+        <input type="number" id="monthly_rent" name="monthly_rent" min="0" placeholder="6500">
+      </div>
+
+      <div class="f">
+        <label>תאריך סיום חוזה</label>
+        <input type="date" id="rental_end_date" name="rental_end_date">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ 06 — תקן 19 -->
+  <div class="card hidden" id="sec-teken19">
+    <div class="card-header">
+      <h2>פרטי רכישה</h2>
+      <span class="badge-cond">תקן 19 בלבד</span>
+    </div>
+    <div class="fg">
+
+      <div class="f">
+        <label>תאריך רכישת הנכס</label>
+        <input type="date" id="purchase_date" name="purchase_date">
+      </div>
+
+      <div class="f">
+        <label>מחיר רכישה (₪)</label>
+        <input type="number" id="purchase_price" name="purchase_price" min="0" placeholder="900000">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ 07 -->
+  <div class="card">
+    <div class="card-header"><h2>שומה</h2></div>
+    <div class="fg">
+
+      <div class="f" id="f-value">
+        <label>שווי מוצע לדירה (₪) <span class="req-star">*</span></label>
+        <input type="number" id="final_value" name="final_value" min="0" step="1000" placeholder="2300000">
+        <span class="hint">ללא פסיקים — לדוגמה: 2300000</span>
+        <span class="err-msg">שדה חובה</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ 08 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>הערות מיוחדות</h2>
+      <span class="badge-opt">אופציונלי</span>
+    </div>
+    <div class="f">
+      <textarea id="notes" name="notes" rows="5"
+                placeholder="הזן הערות נוספות שיופיעו בסוף הדוח..."></textarea>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ SUBMIT -->
+  <div class="submit-bar">
+    <button type="submit" id="gen-btn" class="btn-gen">
+      <span class="spinner"></span>
+      <span class="btn-icon">📄</span>
+      <span id="btn-label">הפק דוח</span>
+    </button>
+    <div id="toast">✅ הדוח הופק בהצלחה — הקובץ יורד כעת</div>
+  </div>
+
+</form>
+</div><!-- /container -->
+
+<script>
+  // ── Conditional: show/hide תקן 19 section ─────────────────────────────────
+  document.getElementById('purpose').addEventListener('change', function () {
+    const sec = document.getElementById('sec-teken19');
+    sec.classList.toggle('hidden', this.value !== 'תקן_19');
+  });
+
+  // ── Required field definitions ────────────────────────────────────────────
+  const REQUIRED = [
+    { id: 'purpose',           msg: 'נא לבחור מטרת חוות הדעת' },
+    { id: 'rights_type',       msg: 'נא לבחור סוג זכויות'     },
+    { id: 'client_gender',     msg: 'נא לבחור תואר'           },
+    { id: 'client_name',       msg: 'שדה חובה'                },
+    { id: 'address',           msg: 'שדה חובה'                },
+    { id: 'block',             msg: 'שדה חובה'                },
+    { id: 'parcel',            msg: 'שדה חובה'                },
+    { id: 'sub_parcel',        msg: 'שדה חובה'                },
+    { id: 'rooms',             msg: 'שדה חובה'                },
+    { id: 'floor',             msg: 'שדה חובה'                },
+    { id: 'registered_area',   msg: 'שדה חובה'                },
+    { id: 'built_area',        msg: 'שדה חובה'                },
+    { id: 'final_value',       msg: 'שדה חובה'                },
+  ];
+
+  // ── Live error clearing ───────────────────────────────────────────────────
+  document.querySelectorAll('input, select, textarea').forEach(el => {
+    el.addEventListener('input', () => {
+      el.closest('.f')?.classList.remove('err');
+    });
+    el.addEventListener('change', () => {
+      el.closest('.f')?.classList.remove('err');
+    });
+  });
+
+  // ── Validate ──────────────────────────────────────────────────────────────
+  function validate() {
+    let ok = true;
+    REQUIRED.forEach(({ id }) => {
+      const el  = document.getElementById(id);
+      const fld = el.closest('.f');
+      if (!el.value.trim()) { fld.classList.add('err'); ok = false; }
+      else                   { fld.classList.remove('err'); }
+    });
+    if (!ok) {
+      const first = document.querySelector('.f.err');
+      if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return ok;
+  }
+
+  // ── Collect all form values ───────────────────────────────────────────────
+  function collect() {
+    const data = {};
+    document.querySelectorAll('#form input:not([type="checkbox"]), #form select, #form textarea')
+      .forEach(el => { if (el.name) data[el.name] = el.value; });
+    ['has_parking', 'has_storage', 'has_garden'].forEach(n => {
+      data[n] = document.getElementById(n).checked;
+    });
+    return data;
+  }
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  document.getElementById('form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    if (!validate()) return;
+
+    const btn   = document.getElementById('gen-btn');
+    const label = document.getElementById('btn-label');
+    const toast = document.getElementById('toast');
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+    label.textContent = 'מפיק דוח...';
+    toast.classList.remove('show');
+
+    try {
+      const resp = await fetch('/shuma/generate', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(collect()),
+      });
+
+      if (!resp.ok) {
+        let msg = `שגיאה ${resp.status}`;
+        try { const j = await resp.json(); msg = j.detail || msg; } catch {}
+        alert('שגיאה בהפקת הדוח:\n' + msg);
+        return;
+      }
+
+      const blob = await resp.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const addr = (document.getElementById('address').value || 'נכס').replace(/[/\\?%*:|"<>]/g, '-');
+      a.href     = url;
+      a.download = `שומת_מקרקעין_${addr}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 5000);
+
+    } catch (err) {
+      alert('שגיאת רשת: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      label.textContent = 'הפק דוח';
+    }
+  });
+</script>
+</body>
+</html>
