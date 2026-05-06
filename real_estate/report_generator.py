@@ -493,88 +493,132 @@ def _section_05_legal(doc: Document, d: PropertyInput):
 
 def _section_06_valuation(doc: Document, d: PropertyInput):
     """עקרונות + נתוני השוואה + שומה"""
-    add_heading(doc, "עקרונות ושיקולים, נתוני השוואה ושומה")
+    add_heading(doc, skill_loader.get("section_06.heading"))
 
     # ── A: Principles ────────────────────────────────────────────
-    add_heading(doc, "א. עקרונות, גורמים ושיקולים", level=2)
+    add_heading(doc, skill_loader.get("section_06.principles.heading"), level=2)
 
-    add_para(doc, "1. כללי", bold=True, font_size=FONT_BODY)
+    add_para(doc, skill_loader.get("section_06.principles.general.title"),
+             bold=True, font_size=FONT_BODY)
     floor_o = floor_ord(d.floor)
+
+    if d.permit_status == PermitStatus.PERMIT:
+        permit_bullet = skill_loader.get(
+            "section_06.principles.general.permit_balcony_unpermitted"
+            if d.balcony_closed_without_permit
+            else "section_06.principles.general.permit_normal"
+        )
+    else:
+        permit_bullet = skill_loader.get("section_06.principles.general.permit_violations")
+
+    area_bullet = (
+        skill_loader.render(
+            "section_06.principles.general.area_with_balcony",
+            built_area=d.built_area, balcony_area=d.balcony_area,
+        )
+        if d.balcony_area > 0
+        else skill_loader.render(
+            "section_06.principles.general.area_no_balcony", built_area=d.built_area)
+    )
+
     general = [
-        f"מיקום הנכס: {d.address}.",
-        f"אופי הסביבה: {d.neighborhood_name} ב{d.city}.",
-        f"שנת בניית הבניין: {d.build_year}. מספר יחידות הדיור בבניין: {d.units_count}.",
-        f"הדירה ממוקמת בקומה ה-{floor_o}, בת {d.rooms} חדרים, פונה לכיוון {d.air_directions}.",
-        (f"שטח הדירה הבנוי הינו כ-{d.built_area:.0f} מ\"ר"
-         + (f", ומרפסת בשטח כ-{d.balcony_area:.0f} מ\"ר" if d.balcony_area > 0 else "")
-         + "."),
-        f"גובה פנים: כ-{d.ceiling_height:.1f} מ'.",
-        (("הדירה בנויה בהתאם להיתר" + (" (למעט סגירת המרפסת)" if d.balcony_closed_without_permit else ""))
-         if d.permit_status == PermitStatus.PERMIT
-         else "נמצאו חריגות בנייה.") + " — מצב היתר.",
-        f"רמת גמר: {d.finish_level.value}.",
+        skill_loader.render("section_06.principles.general.location", address=d.address),
+        skill_loader.render(
+            "section_06.principles.general.environment",
+            neighborhood=d.neighborhood_name, city=d.city,
+        ),
+        skill_loader.render(
+            "section_06.principles.general.building",
+            build_year=d.build_year, units_count=d.units_count,
+        ),
+        skill_loader.render(
+            "section_06.principles.general.apartment",
+            floor_ord=floor_o, rooms=d.rooms, air=d.air_directions,
+        ),
+        area_bullet,
+        skill_loader.render("section_06.principles.general.ceiling",
+                            ceiling_height=d.ceiling_height),
+        permit_bullet,
+        skill_loader.render("section_06.principles.general.finish", level=d.finish_level.value),
     ]
     attachments = []
     if d.has_parking:
-        attachments.append("חניה")
+        attachments.append(skill_loader.get("section_06.principles.general.attachment.parking"))
     if d.has_storage:
-        attachments.append("מחסן")
+        attachments.append(skill_loader.get("section_06.principles.general.attachment.storage"))
     if d.has_garden:
-        attachments.append("גינה")
+        attachments.append(skill_loader.get("section_06.principles.general.attachment.garden"))
     if attachments:
-        general.append(f"הצמדות: {', '.join(attachments)}.")
+        general.append(skill_loader.render(
+            "section_06.principles.general.attachments", atts=", ".join(attachments)))
     for item in general:
         add_bullet(doc, item)
 
-    add_para(doc, "2. תכנון ורישוי", bold=True, font_size=FONT_BODY, space_before=6)
+    add_para(doc, skill_loader.get("section_06.principles.planning.title"),
+             bold=True, font_size=FONT_BODY, space_before=6)
     planning_bullets = [
-        f"בהתאם לתכניות בניין עיר שבתוקף החלקה מסווגת ביעוד '{d.zoning_for_principles}'.",
+        skill_loader.render("section_06.principles.planning.zoning",
+                            zoning=d.zoning_for_principles),
     ]
     if d.has_original_permit:
-        planning_bullets.append(
-            f"הדירה שבנדון בנויה בהתאם להיתר בנייה משנת {_opt(d.build_year, 'שנת בנייה')}."
-        )
+        planning_bullets.append(skill_loader.render(
+            "section_06.principles.planning.permit",
+            year=_opt(d.build_year, 'שנת בנייה'),
+        ))
     else:
-        planning_bullets.append("לא אותר היתר הבנייה המקורי של הבניין.")
+        planning_bullets.append(skill_loader.get("section_06.principles.planning.no_permit"))
     if d.has_completion_cert and d.completion_cert_date:
-        year = d.completion_cert_date.split("/")[-1] if "/" in d.completion_cert_date else d.completion_cert_date
-        planning_bullets.append(f"תעודת גמר לבניין ניתנה בשנת {year}.")
+        year = (d.completion_cert_date.split("/")[-1]
+                if "/" in d.completion_cert_date else d.completion_cert_date)
+        planning_bullets.append(skill_loader.render(
+            "section_06.principles.planning.completion", year=year))
     for item in planning_bullets:
         add_bullet(doc, item)
 
-    add_para(doc, "3. מצב משפטי", bold=True, font_size=FONT_BODY, space_before=6)
+    add_para(doc, skill_loader.get("section_06.principles.legal.title"),
+             bold=True, font_size=FONT_BODY, space_before=6)
     legal_bullets = [
-        "החלקה נרשמה בפנקס הבתים המשותפים, באופן בו כל תת חלקה מהווה יחידה עצמאית.",
-        f"הדירה שבנדון רשומה על שם {d.rights_owner}.",
-        "נכון למועד הביקור, הדירה מושכרת בשכירות חופשית."
-        if d.is_rented
-        else "נכון למועד הביקור, הדירה אינה מושכרת.",
+        skill_loader.get("section_06.principles.legal.registered"),
+        skill_loader.render("section_06.principles.legal.owner", owner=d.rights_owner),
+        skill_loader.get(
+            "section_06.principles.legal.rented" if d.is_rented
+            else "section_06.principles.legal.not_rented"
+        ),
     ]
     for item in legal_bullets:
         add_bullet(doc, item)
 
-    add_para(doc, "4. עקרונות התחשיב", bold=True, font_size=FONT_BODY, space_before=6)
+    add_para(doc, skill_loader.get("section_06.principles.calc.title"),
+             bold=True, font_size=FONT_BODY, space_before=6)
     for item in [
-        "אומדן השווי נערך לנכס שבנדון כחופשי מכל הערה, חוב ושעבוד.",
-        "הובא בחשבון מצב שוק המקרקעין ומחירי נכסים דומים ורלוונטיים בסביבת הנכס.",
+        skill_loader.get("section_06.principles.calc.free"),
+        skill_loader.get("section_06.principles.calc.market"),
     ]:
         add_bullet(doc, item)
 
     add_para(doc, "")
 
     # ── B: Comparison data ───────────────────────────────────────
-    add_heading(doc, "ב. נתוני השוואה", level=2)
+    add_heading(doc, skill_loader.get("section_06.comparison.heading"), level=2)
 
     if d.comparison_properties:
-        headers = [
-            "מס'", "כתובת", "קומה", "חד'",
-            "שטח בנוי מ\"ר", "מרפסת מ\"ר", "שטח אקו' מ\"ר",
-            "מחיר", "₪/מ\"ר אקו'", "הערות",
-        ]
+        headers = [skill_loader.get(h) for h in [
+            "section_06.comparison.header.no",
+            "section_06.comparison.header.address",
+            "section_06.comparison.header.floor",
+            "section_06.comparison.header.rooms",
+            "section_06.comparison.header.built_area",
+            "section_06.comparison.header.balcony_area",
+            "section_06.comparison.header.equiv_area",
+            "section_06.comparison.header.price",
+            "section_06.comparison.header.price_per_sqm",
+            "section_06.comparison.header.notes",
+        ]]
         ctbl = make_table(doc, len(d.comparison_properties) + 1, len(headers))
         for i, h in enumerate(headers):
             set_cell(ctbl.rows[0].cells[i], h, bold=True, font_size=10)
 
+        empty = skill_loader.get("section_06.comparison.cell.empty")
         for j, prop in enumerate(d.comparison_properties):
             vals = [
                 str(j + 1),
@@ -582,80 +626,74 @@ def _section_06_valuation(doc: Document, d: PropertyInput):
                 prop.floor,
                 prop.rooms,
                 f"{prop.built_area:.0f}",
-                f"{prop.balcony_area:.0f}" if prop.balcony_area else "—",
+                f"{prop.balcony_area:.0f}" if prop.balcony_area else empty,
                 f"{prop.equiv_area:.1f}",
                 fmt_ils(prop.price),
-                f"{prop.price_per_sqm:,.0f} ₪",
-                prop.notes or "—",
+                skill_loader.render("section_06.comparison.cell.price_per_sqm",
+                                    price=prop.price_per_sqm),
+                prop.notes or empty,
             ]
             for i, v in enumerate(vals):
                 set_cell(ctbl.rows[j + 1].cells[i], v, font_size=10)
 
         add_para(doc, "")
-        add_para(
-            doc,
-            f"לאור הנתונים שהוצגו לעיל, ובהתחשב במאפייני הנכס שבנדון ובמיקומו "
-            f"נראה כסביר לאמוד שווי מ\"ר אקו' בנכס שבנדון בסך של כ- "
-            f"{d.sqm_equiv_price:,.0f} ₪ / מ\"ר אקו'."
-        )
+        add_para(doc, skill_loader.render(
+            "section_06.comparison.summary", price=d.sqm_equiv_price))
     else:
-        add_para(doc, "יש להשלים — נתוני עסקאות השוואה יש להוסיף ידנית.")
+        add_para(doc, skill_loader.get("section_06.comparison.missing"))
 
     add_para(doc, "")
 
     # ── C: Valuation ─────────────────────────────────────────────
-    add_heading(doc, "ג. שומה", level=2)
+    add_heading(doc, skill_loader.get("section_06.valuation.heading"), level=2)
 
     value_words = num_to_words(int(d.final_value))
     add_para(
         doc,
-        f"בהתבסס על כל האמור לעיל ובמיקומו של הנכס המהווה את תת חלקה "
-        f"{d.sub_parcel} בחלקה מספר {d.parcel} בגוש {d.block}, "
-        f"ברחוב {d.address}:",
+        skill_loader.render(
+            "section_06.valuation.intro",
+            sub_parcel=d.sub_parcel, parcel=d.parcel, block=d.block, address=d.address,
+        ),
         font_size=FONT_BODY,
     )
     add_para(
         doc,
-        f"אומדן שווי הזכויות בנכס שבנדון הינו סביב "
-        f"{fmt_ils(d.final_value)} "
-        f"({value_words} שקלים חדשים) כולל מע\"מ.",
+        skill_loader.render(
+            "section_06.valuation.final",
+            value=fmt_ils(d.final_value), words=value_words,
+        ),
         bold=True,
         font_size=FONT_BODY + 1,
     )
 
     if d.report_purpose == ReportPurpose.STANDARD_19:
         rapid = d.final_value * 0.85
-        add_para(
-            doc,
-            f"לצורך מימוש מהיר בדרך של מכירה באילוץ, ניתן להעמיד את שווי הנכס "
-            f"על סך של 85% מהשווי הנקוב לעיל, קרי: "
-            f"{fmt_ils(rapid)} ({num_to_words(int(rapid))} שקלים חדשים)."
-        )
+        add_para(doc, skill_loader.render(
+            "section_06.valuation.rapid",
+            value=fmt_ils(rapid), words=num_to_words(int(rapid)),
+        ))
 
     if d.report_purpose == ReportPurpose.EVACUATION:
-        for label, val in [
-            ("חלופה א' — שווי קיים", d.future_value_a),
-            ("חלופה ב' — שווי עתידי", d.future_value_b),
+        for label_id, val in [
+            ("section_06.evacuation.alt_a", d.future_value_a),
+            ("section_06.evacuation.alt_b", d.future_value_b),
         ]:
-            words = num_to_words(int(val))
-            add_para(doc, f"{label}: {fmt_ils(val)} ({words} שקלים חדשים).")
+            add_para(doc, skill_loader.render(
+                "section_06.evacuation.entry",
+                label=skill_loader.get(label_id),
+                value=fmt_ils(val), words=num_to_words(int(val)),
+            ))
 
     add_para(doc, "")
 
     # Closing declarations
-    add_heading(doc, "הצהרות", level=2)
-    for decl in [
-        "הננו מצהירים כי אין לנו עניין אישי עם הנכס שבנדון, "
-        "בעלי הזכויות בנכס או עם מזמין חוות הדעת.",
-
-        "חוות הדעת נערכה על פי תקנות שמאי המקרקעין (אתיקה מקצועית) "
-        "התשכ\"ו – 1966 ועל פי התקנים המקצועיים של הועדה לתקינה שמאית "
-        "במועצת שמאי המקרקעין.",
-
-        "שומה זו הוכנה עבור מזמינה ולמטרתה בלבד. אין היא מהווה תחליף "
-        "לייעוץ משפטי ואין להסתמך עליה לכל מטרה אחרת.",
+    add_heading(doc, skill_loader.get("section_06.declarations.heading"), level=2)
+    for decl_id in [
+        "section_06.declarations.no_interest",
+        "section_06.declarations.ethics",
+        "section_06.declarations.scope",
     ]:
-        add_para(doc, decl)
+        add_para(doc, skill_loader.get(decl_id))
 
 
 def _section_07_tax(doc: Document, d: PropertyInput):
