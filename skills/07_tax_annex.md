@@ -62,3 +62,48 @@
 - אם לא ידוע תאריך / מחיר רכישה → לציין "לא הוצג בפני הח"מ"
 - אם הנכס פטור ממס שבח (דירת מגורים יחידה) → לציין את הפטור
 - תחשיב עלות שחזור הוא לצורך הבנת שווי הנטו בלבד, לא ניתוח שמאי נפרד
+
+---
+
+## Generator snippets
+
+<!-- snippet: section_07.heading -->
+נספח מיסוי
+<!-- /snippet -->
+
+<!-- snippet: section_07.intro -->
+בהתאם לבקשתכם, להלן תחשיב שווי הנכס נטו לאחר הפחתות בגין עלויות צפויות בעת מימוש:
+<!-- /snippet -->
+
+<!-- snippet: section_07.body -->
+הנכס שבנדון נרכש בתאריך {purchase_date} בתמורה לסך של כ-{purchase_price}. שווי הנכס גבוה מעלותו באופן בו צפויה לחול חבות במס בעת מימוש (הובא בחשבון מס שבח בשיעור של 25%).
+<!-- /snippet -->
+
+<!-- snippet: section_07.label.gross -->
+שווי השוק (ברוטו)
+<!-- /snippet -->
+
+<!-- snippet: section_07.label.deduction -->
+הפחתת מס שבח (25%)
+<!-- /snippet -->
+
+<!-- snippet: section_07.label.net -->
+שווי נטו למימוש
+<!-- /snippet -->
+
+<!-- snippet: section_07.deduction_value -->
+({tax})
+<!-- /snippet -->
+
+<!-- snippet: section_photos.heading -->
+תצלומי הנכס
+<!-- /snippet -->
+
+<!-- snippet: section_notes.heading -->
+הערות מיוחדות
+<!-- /snippet -->
+
+<!-- snippet: common.image_invalid -->
+[תמונה לא תקינה]
+<!-- /snippet -->
+

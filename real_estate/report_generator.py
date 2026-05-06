@@ -258,7 +258,7 @@ def _embed_images(doc: Document, images: list, width_cm: float = 7.5):
         try:
             cell.paragraphs[0].add_run().add_picture(io.BytesIO(img_bytes), width=Cm(width_cm))
         except Exception:
-            cell.paragraphs[0].add_run("[תמונה לא תקינה]")
+            cell.paragraphs[0].add_run(skill_loader.get("common.image_invalid"))
     add_para(doc, "")
 
 
@@ -702,30 +702,25 @@ def _section_07_tax(doc: Document, d: PropertyInput):
         return
 
     doc.add_page_break()
-    add_heading(doc, "נספח מיסוי")
+    add_heading(doc, skill_loader.get("section_07.heading"))
 
-    add_para(
-        doc,
-        "בהתאם לבקשתכם, להלן תחשיב שווי הנכס נטו לאחר הפחתות "
-        "בגין עלויות צפויות בעת מימוש:"
-    )
+    add_para(doc, skill_loader.get("section_07.intro"))
 
     gain = d.final_value - d.purchase_price
     tax = gain * 0.25 if gain > 0 else 0.0
     net = d.final_value - tax
 
-    add_para(
-        doc,
-        f"הנכס שבנדון נרכש בתאריך {d.purchase_date} בתמורה לסך של "
-        f"כ-{fmt_ils(d.purchase_price)}. שווי הנכס גבוה מעלותו באופן בו "
-        f"צפויה לחול חבות במס בעת מימוש "
-        f"(הובא בחשבון מס שבח בשיעור של 25%)."
-    )
+    add_para(doc, skill_loader.render(
+        "section_07.body",
+        purchase_date=d.purchase_date,
+        purchase_price=fmt_ils(d.purchase_price),
+    ))
 
     tax_rows = [
-        ("שווי השוק (ברוטו)", fmt_ils(d.final_value), False),
-        ("הפחתת מס שבח (25%)", f"({fmt_ils(tax)})", False),
-        ("שווי נטו למימוש", fmt_ils(net), True),
+        (skill_loader.get("section_07.label.gross"), fmt_ils(d.final_value), False),
+        (skill_loader.get("section_07.label.deduction"),
+         skill_loader.render("section_07.deduction_value", tax=fmt_ils(tax)), False),
+        (skill_loader.get("section_07.label.net"), fmt_ils(net), True),
     ]
     ttbl = make_table(doc, len(tax_rows), 2, col_widths_cm=[8, 8])
     for i, (lbl, val, bold_row) in enumerate(tax_rows):
@@ -736,7 +731,7 @@ def _section_07_tax(doc: Document, d: PropertyInput):
 def _section_photos(doc: Document, d: PropertyInput):
     if not d.property_images:
         return
-    add_heading(doc, "תצלומי הנכס")
+    add_heading(doc, skill_loader.get("section_photos.heading"))
     _embed_images(doc, d.property_images, width_cm=7.5)
 
 
@@ -745,7 +740,7 @@ def _section_notes(doc: Document, d: PropertyInput):
     if not d.special_notes:
         return
     doc.add_page_break()
-    add_heading(doc, "הערות מיוחדות")
+    add_heading(doc, skill_loader.get("section_notes.heading"))
     add_para(doc, d.special_notes)
 
 
