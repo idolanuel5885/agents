@@ -43,12 +43,7 @@ which sections render and which validation rules apply.
   input or an authoritative external source (Tabu, Nadlan.gov.il, GovMap).
   If a value isn't available, render it as a placeholder (`[שם השדה]` or
   `יש להשלים`) so the appraiser sees what to fill manually.
-- **No statistical inventions.** When generating descriptive text (city,
-  neighborhood, street descriptions), describe qualitative character only
-  (geography, building style, accessibility, general atmosphere). Do not
-  invent population numbers, average prices, demographic percentages, or
-  any other quantitative claim. If a number is needed, it must come from
-  an authoritative source or be omitted.
+- **No quantitative claims without a cited source.** When generating descriptive text (city, neighborhood, street descriptions), describe qualitative character only — geography, building style, accessibility, general atmosphere. Quantitative claims (population numbers, average prices, demographic percentages, growth rates) are permitted **only** when sourced from an authoritative reference cited inline (CBS / Lamas, official municipality website, official statistics body). Rounding for readability is acceptable. Inventing numbers from the model's general knowledge is not, even if the number is "probably correct." If a number is needed and no source is available, omit the claim or replace it with a qualitative description.
 - **No drift in legal/factual sections.** Closing declarations, ethics
   statements, and the "principles of calculation" section contain text
   that is fixed by professional standards. Do not paraphrase or "improve"
@@ -106,6 +101,7 @@ maturity:
 | Nadlan.gov.il | Comparable transactions | Planned (internal API) |
 | Tabu (`tabu.justice.gov.il`) | Land registry extract | Manual (auth required) |
 | Municipal sites | Building permits, zoning plans | Manual (CAPTCHA) |
+| CBS / Lamas (cbs.gov.il) | Official population, demographic, and statistical figures for cities and neighborhoods | Manual (when needed for specific data) |
 
 For every planned automation, the principle is: **graceful degradation.**
 If the auto-fetch fails, the UI opens the relevant external page in a new
@@ -269,7 +265,13 @@ is in code:
 | Form CSS and UI strings | embedded in `shuma.html` |
 | Demo data (sample city/neighborhood text) | `real_estate/demo_data.py` |
 
-### B.7 RTL helper layer
+### B.7 Skills directory
+
+A `skills/` directory at the repository root holds the canonical Hebrew text templates for each report section. Files are named by section number and English purpose. These files are the source of truth for report wording. Currently the report generator does not load from them — it has its own embedded strings in `report_generator.py` (see B.6). The skills directory is the target state; the embedded strings are the current state. Migrating from one to the other is a known pending task (see C.8).
+
+When asked to modify report wording, edit the corresponding file in `skills/`, not the embedded string in code. When asked to modify generation logic, edit `report_generator.py`. If a wording change requires a code change too, do both.
+
+### B.8 RTL helper layer
 
 `real_estate/docx_utils.py` wraps python-docx with raw XML
 (`OxmlElement`, `qn`) to enforce:
@@ -283,7 +285,7 @@ Public functions: `make_rtl_doc`, `add_para`, `add_heading`, `add_bullet`,
 `set_cell`, `make_table`. **Always use these.** Never set `cell.text`
 directly — it silently strips RTL.
 
-### B.8 Dependencies installed
+### B.9 Dependencies installed
 
 From root `requirements.txt`:
 - `fastapi >= 0.111.0`
@@ -297,7 +299,7 @@ From root `requirements.txt`:
 no HTTP client (`requests` / `httpx`), no HTML parser, no Google SDK,
 no GIS library, no OAuth client. Add them as needed.
 
-### B.9 Validation
+### B.10 Validation
 
 Client-side only (in `shuma.html` JS). No server-side validation. No
 tests directory. No linter config. No `.env.example` for the appraisal
@@ -369,6 +371,14 @@ only validation is client-side in `shuma.html`. Any change to
 report generation is verified manually by generating and inspecting
 demo reports. A handful of golden-file tests on the demo outputs
 would catch most regressions.
+
+### C.8 Skills directory exists but is not yet wired into the generator
+
+The `skills/` directory contains templates as text files, but `report_generator.py` still uses its own embedded strings. The two need to be unified. This is a planned migration but has not been done yet. Until it is done, edits to `skills/` files do not affect generated reports.
+
+### C.9 Skill files referenced yad2 and madlan, which are not approved data sources
+
+Resolved as part of this commit — references removed from `skills/00_index.md`. The system's approved data sources are: nadlan.gov.il, govmap, Google Maps, Tabu, CBS. yad2 and madlan are not approved.
 
 ---
 
