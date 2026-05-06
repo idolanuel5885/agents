@@ -31,6 +31,7 @@ class ClientGender(str, Enum):
     MALE = "זכר"
     FEMALE = "נקבה"
     COMPANY = "חברה"
+    BANK = "בנק"
 
 
 @dataclass
@@ -173,3 +174,6 @@ class PropertyInput:
     # פינוי_בינוי
     future_value_a: float = 0.0
     future_value_b: float = 0.0
+
+    # Free-text notes appended to the report
+    special_notes: str = ""

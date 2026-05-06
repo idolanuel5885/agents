@@ -1,9 +1,10 @@
 """Report generator — builds all sections of the Word document."""
+import io
 from docx import Document
 from docx.shared import Cm
 
 from .models import (
-    PropertyInput, ReportPurpose, RightsType, FinishLevel, PermitStatus
+    PropertyInput, ReportPurpose, RightsType, FinishLevel, PermitStatus, ClientGender
 )
 from .docx_utils import (
     make_rtl_doc, add_para, add_heading, add_bullet, set_cell, make_table,
@@ -89,6 +90,13 @@ def fmt_ils(amount: float) -> str:
     return f"{amount:,.0f} ₪"
 
 
+def _opt(val, suffix: str = "") -> str:
+    """Return val+suffix or 'יש להשלים' for falsy values."""
+    if val is None or val == "" or val == 0:
+        return "יש להשלים"
+    return f"{val}{suffix}"
+
+
 def floor_ord(n: int) -> str:
     return _FLOOR_ORD.get(n, str(n))
 
@@ -155,20 +163,20 @@ def _section_01_title(doc: Document, d: PropertyInput):
     add_para(doc, f"חוות דעת מספר: {d.report_number}", space_after=12)
     add_para(doc, "לכבוד", space_after=2)
 
-    from .models import ClientGender
     if d.client_gender == ClientGender.COMPANY:
         add_para(doc, f"{d.client_name} בע\"מ", space_after=2)
-        salutation = "א.ג.נ"
+        salutation, you = "א.ג.נ", "בקשתכם"
+    elif d.client_gender == ClientGender.BANK:
+        add_para(doc, f"בנק {d.client_name}", space_after=2)
+        salutation, you = "א.ג.נ", "בקשתכם"
     elif d.client_gender == ClientGender.FEMALE:
         add_para(doc, f"גב' {d.client_name}", space_after=2)
-        salutation = "ג.נ"
+        salutation, you = "ג.נ", "בקשתך"
     else:
         add_para(doc, f"מר {d.client_name}", space_after=2)
-        salutation = "א.ג.נ"
+        salutation, you = "א.ג.נ", "בקשתך"
 
     add_para(doc, salutation, space_after=12)
-
-    you = "בקשתכם" if d.client_gender == ClientGender.COMPANY else "בקשתך"
     add_para(
         doc,
         f"בהתאם ל{you}, ערכנו חוות דעת ביחס לשווי הנכס שבנדון "
@@ -262,9 +270,9 @@ def _section_03_description(doc: Document, d: PropertyInput):
     add_para(doc, "")
     add_para(
         doc,
-        f"על החלקה הוקם בניין מגורים אשר נבנה בשנת {d.build_year}. "
-        f"הבניין מונה {d.total_floors} קומות מעל קומת {d.ground_floor_use} "
-        f"וכולל {d.units_count} יחידות דיור. "
+        f"על החלקה הוקם בניין מגורים אשר נבנה בשנת {_opt(d.build_year)}. "
+        f"הבניין מונה {_opt(d.total_floors)} קומות מעל קומת {d.ground_floor_use} "
+        f"וכולל {_opt(d.units_count)} יחידות דיור. "
         f"מצבו הפיזי של הבניין {d.building_physical_condition}."
     )
 
@@ -330,16 +338,19 @@ def _section_04_planning(doc: Document, d: PropertyInput):
     add_heading(doc, "הרקע התכנוני")
     add_heading(doc, "א. תוכניות מתאר", level=2)
 
-    for plan in d.planning_plans:
-        add_para(
-            doc,
-            f"בהתאם לתוכנית מתאר מקומית מספר {plan.plan_number}, "
-            f"אשר פורסמה למתן תוקף בילקוט פרסומים מספר {plan.gazette_number} "
-            f"מתאריך {plan.gazette_date}, "
-            f"החלקה שבנדון סווגה ביעוד \"{plan.zoning}\"."
-        )
-        if plan.notes:
-            add_para(doc, plan.notes)
+    if not d.planning_plans:
+        add_para(doc, "יש להשלים")
+    else:
+        for plan in d.planning_plans:
+            add_para(
+                doc,
+                f"בהתאם לתוכנית מתאר מקומית מספר {plan.plan_number}, "
+                f"אשר פורסמה למתן תוקף בילקוט פרסומים מספר {plan.gazette_number} "
+                f"מתאריך {plan.gazette_date}, "
+                f"החלקה שבנדון סווגה ביעוד \"{plan.zoning}\"."
+            )
+            if plan.notes:
+                add_para(doc, plan.notes)
 
     add_heading(doc, "ב. רישוי", level=2)
     add_para(
@@ -349,16 +360,19 @@ def _section_04_planning(doc: Document, d: PropertyInput):
     )
 
     if not d.has_original_permit:
-        add_bullet(doc, "לא אותר היתר הבנייה המקורי של הבניין.")
+        add_bullet(doc, "לא אותר היתר הבנייה המקורי של הבניין. יש להשלים.")
     else:
+        permit_num = _opt(d.building_permit_number)
+        permit_date = _opt(d.building_permit_date)
+        permit_allowed = _opt(d.building_permit_allowed)
         add_bullet(
             doc,
-            f"היתר בנייה מספר {d.building_permit_number} "
-            f"מתאריך {d.building_permit_date}, "
-            f"אשר התיר {d.building_permit_allowed}."
+            f"היתר בנייה מספר {permit_num} "
+            f"מתאריך {permit_date}, "
+            f"אשר התיר {permit_allowed}."
         )
         if d.has_completion_cert:
-            add_bullet(doc, f"תעודת גמר מתאריך {d.completion_cert_date}.")
+            add_bullet(doc, f"תעודת גמר מתאריך {_opt(d.completion_cert_date)}.")
 
     if d.balcony_closed_without_permit:
         add_para(
@@ -461,7 +475,7 @@ def _section_06_valuation(doc: Document, d: PropertyInput):
     ]
     if d.has_original_permit:
         planning_bullets.append(
-            f"הדירה שבנדון בנויה בהתאם להיתר בנייה משנת {d.build_year}."
+            f"הדירה שבנדון בנויה בהתאם להיתר בנייה משנת {_opt(d.build_year)}."
         )
     else:
         planning_bullets.append("לא אותר היתר הבנייה המקורי של הבניין.")
@@ -521,13 +535,14 @@ def _section_06_valuation(doc: Document, d: PropertyInput):
                 set_cell(ctbl.rows[j + 1].cells[i], v, font_size=10)
 
         add_para(doc, "")
-
-    add_para(
-        doc,
-        f"לאור הנתונים שהוצגו לעיל, ובהתחשב במאפייני הנכס שבנדון ובמיקומו "
-        f"נראה כסביר לאמוד שווי מ\"ר אקו' בנכס שבנדון בסך של כ- "
-        f"{d.sqm_equiv_price:,.0f} ₪ / מ\"ר אקו'."
-    )
+        add_para(
+            doc,
+            f"לאור הנתונים שהוצגו לעיל, ובהתחשב במאפייני הנכס שבנדון ובמיקומו "
+            f"נראה כסביר לאמוד שווי מ\"ר אקו' בנכס שבנדון בסך של כ- "
+            f"{d.sqm_equiv_price:,.0f} ₪ / מ\"ר אקו'."
+        )
+    else:
+        add_para(doc, "יש להשלים — נתוני עסקאות השוואה יש להוסיף ידנית.")
 
     add_para(doc, "")
 
@@ -623,30 +638,46 @@ def _section_07_tax(doc: Document, d: PropertyInput):
         set_cell(ttbl.rows[i].cells[1], val, bold=bold_row)
 
 
+def _section_notes(doc: Document, d: PropertyInput):
+    """הערות מיוחדות — appears only when special_notes is set."""
+    if not d.special_notes:
+        return
+    doc.add_page_break()
+    add_heading(doc, "הערות מיוחדות")
+    add_para(doc, d.special_notes)
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def generate_report(data: PropertyInput, output_path: str):
-    """Build and save the Word document."""
+def _build_doc(data: PropertyInput) -> Document:
     doc = make_rtl_doc()
-
     _section_01_title(doc, data)
     doc.add_page_break()
-
     _section_02_details_table(doc, data)
     doc.add_page_break()
-
     _section_03_description(doc, data)
     doc.add_page_break()
-
     _section_04_planning(doc, data)
     doc.add_page_break()
-
     _section_05_legal(doc, data)
     doc.add_page_break()
-
     _section_06_valuation(doc, data)
-
     _section_07_tax(doc, data)
+    _section_notes(doc, data)
+    return doc
 
+
+def generate_report(data: PropertyInput, output_path: str):
+    """Build and save the Word document to a file path."""
+    doc = _build_doc(data)
     doc.save(output_path)
     print(f"\n  הדוח נשמר: {output_path}")
+
+
+def generate_report_bytes(data: PropertyInput) -> bytes:
+    """Build the Word document and return raw bytes (for HTTP download)."""
+    doc = _build_doc(data)
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
