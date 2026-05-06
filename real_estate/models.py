@@ -139,8 +139,9 @@ class PropertyInput:
     city_description: str
     neighborhood_name: str
     neighborhood_description: str
-    street_type: str              # פנימי / ראשי
-    street_direction: str         # חד-סטרי / דו-סטרי
+    street_description: str       # free-text street paragraph
+    street_type: str              # פנימי / ראשי (kept for CLI form)
+    street_direction: str         # חד-סטרי / דו-סטרי (kept for CLI form)
 
     # Lot
     lot_area: float
@@ -177,3 +178,7 @@ class PropertyInput:
 
     # Free-text notes appended to the report
     special_notes: str = ""
+
+    # Media (bytes)
+    property_images: List[bytes] = field(default_factory=list)
+    planning_images: List[tuple] = field(default_factory=list)  # (doc_type, bytes)
