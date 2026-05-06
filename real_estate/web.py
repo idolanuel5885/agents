@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, Response
 from typing import List
 
@@ -147,10 +147,22 @@ async def generate(
         if f.filename:
             img_bytes.append(await f.read())
 
+    _IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff")
     plan_imgs: List[tuple] = []
     for f, t in zip(plan_docs, plan_types):
-        if f.filename:
-            plan_imgs.append((t, await f.read()))
+        if not f.filename:
+            continue
+        ctype = (f.content_type or "").lower()
+        ext_ok = f.filename.lower().endswith(_IMAGE_EXTS)
+        if not ctype.startswith("image/") and not ext_ok:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"הקובץ '{f.filename}' אינו תמונה. ניתן להעלות "
+                    "כמסמכי תכנון רק קבצי תמונה (JPG/PNG/GIF/WebP/TIFF)."
+                ),
+            )
+        plan_imgs.append((t, await f.read()))
 
     data = PropertyInput(
         report_number=f"WEB-{date.today().strftime('%Y%m%d')}",
@@ -232,7 +244,7 @@ async def generate(
     )
 
     docx_bytes = generate_report_bytes(data)
-    safe_address = re.sub(r'[\\/:*?"<>|]', "-", payload.address)[:50]
+    safe_address = re.sub(r'[\\/:*?"<>|]', "-", address)[:50]
     filename_he = f"שומת_מקרקעין_{safe_address}.docx"
     # RFC 5987: UTF-8 percent-encode for non-ASCII filenames
     from urllib.parse import quote
