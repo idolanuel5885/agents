@@ -118,90 +118,112 @@
 ## Generator snippets
 
 <!-- snippet: section_05.heading -->
+<!-- character: fixed -->
 המצב המשפטי
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.heading -->
+<!-- character: fixed -->
 א. נסח רישום מקרקעין
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.intro -->
+<!-- character: semi -->
 על פי העתק רישום מפנקס הבתים המשותפים, אשר הופק על ידי הח"מ בתאריך {registration_date} באמצעות האינטרנט, עולים, בין היתר, הפרטים הבאים:
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.label.block -->
+<!-- character: fixed -->
 גוש
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.label.parcel -->
+<!-- character: fixed -->
 חלקה
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.label.sub_parcel -->
+<!-- character: fixed -->
 תת חלקה
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.label.floor_description -->
+<!-- character: fixed -->
 תיאור קומה
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.label.area -->
+<!-- character: fixed -->
 שטח
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.label.common_share -->
+<!-- character: fixed -->
 החלק ברכוש המשותף
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.label.owners -->
+<!-- character: fixed -->
 בעלויות
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.label.notes -->
+<!-- character: fixed -->
 הערות
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.notes_default -->
+<!-- character: fixed -->
 לא נרשמו הערות
 <!-- /snippet -->
 
 <!-- snippet: section_05.registration.area_value -->
+<!-- character: semi -->
 {area:.0f} מ"ר
 <!-- /snippet -->
 
 <!-- snippet: section_05.diagram.heading -->
+<!-- character: fixed -->
 ב. תשריט בית משותף
 <!-- /snippet -->
 
 <!-- snippet: section_05.diagram.para -->
+<!-- character: semi -->
 להלן תכנית קומה {floor} מתוך תשריט הבית המשותף: [הכנס תמונה]
 <!-- /snippet -->
 
 <!-- snippet: section_05.rental.heading -->
+<!-- character: fixed -->
 ג. הסכם שכירות
 <!-- /snippet -->
 
 <!-- snippet: section_05.rental.intro -->
+<!-- character: semi -->
 בהתאם להסכם שכירות בלתי מוגנת אשר נחתם בתאריך {rental_agreement_date}, בין {landlord_name} לבין {tenant_name}, עולים הפרטים הבאים:
 <!-- /snippet -->
 
 <!-- snippet: section_05.rental.label.address -->
+<!-- character: fixed -->
 המושכר
 <!-- /snippet -->
 
 <!-- snippet: section_05.rental.label.period -->
+<!-- character: fixed -->
 תקופת השכירות
 <!-- /snippet -->
 
 <!-- snippet: section_05.rental.label.rent -->
+<!-- character: fixed -->
 דמי השכירות
 <!-- /snippet -->
 
 <!-- snippet: section_05.rental.period_value -->
+<!-- character: semi -->
 {start} — {end}
 <!-- /snippet -->
 
 <!-- snippet: section_05.rental.rent_value -->
+<!-- character: semi -->
 {rent} לחודש
 <!-- /snippet -->
 

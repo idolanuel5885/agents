@@ -30,7 +30,7 @@ _SNIPPET_RE = re.compile(
     r"\n<!--\s*/snippet\s*-->",
     re.DOTALL,
 )
-_CHARACTER_LINE_RE = re.compile(r"\A\s*<!--\s*character:\s*[A-Za-z]+\s*-->\s*\n?")
+_CHARACTER_LINE_RE = re.compile(r"\A[ \t]*<!--\s*character:\s*[A-Za-z]+\s*-->[ \t]*\n")
 
 _cache: Dict[str, str] = {}
 _loaded = False

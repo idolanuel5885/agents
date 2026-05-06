@@ -112,142 +112,177 @@
 ## Generator snippets
 
 <!-- snippet: finish.basic -->
+<!-- character: fixed -->
 רמת הגמר בסיסית וכוללת ריצוף באריחי גרניט פורצלן, מזגנים עיליים, חלונות זכוכית עם פרופיל אלומיניום, דלת פלדלת, מטבח ארונות עץ ומשטח שיש, אריחי קרמיקה בחדר הרחצה ואסלת מונובלוק.
 <!-- /snippet -->
 
 <!-- snippet: finish.good -->
+<!-- character: fixed -->
 רמת הגמר טובה וכוללת ריצוף באריחי גרניט פורצלן בפורמט גדול, מזגנים עיליים, תריסים חשמליים, חלונות זכוכית עם פרופיל אלומיניום, דלת פלדלת, מטבח ארונות עץ ומשטח שיש, אריחי קרמיקה בחדר הרחצה ואסלת מונובלוק.
 <!-- /snippet -->
 
 <!-- snippet: finish.luxury -->
+<!-- character: fixed -->
 רמת הגמר טובה מאוד וכוללת ריצוף פרקט, מזגן מרכזי, תריסים חשמליים, חלונות זכוכית בפרופיל אלומיניום ברמה גבוהה, דלת פלדלת, מטבח מעוצב עם ציוד מובנה, חיפוי מיוחד בחדרי הרחצה.
 <!-- /snippet -->
 
 <!-- snippet: section_03.heading -->
+<!-- character: fixed -->
 תיאור הנכס והסביבה
 <!-- /snippet -->
 
 <!-- snippet: section_03.environment.heading -->
+<!-- character: fixed -->
 תיאור הסביבה הכללית
 <!-- /snippet -->
 
 <!-- snippet: section_03.placeholder.city -->
+<!-- character: variable -->
 [תיאור העיר]
 <!-- /snippet -->
 
 <!-- snippet: section_03.placeholder.neighborhood -->
+<!-- character: variable -->
 [תיאור השכונה]
 <!-- /snippet -->
 
 <!-- snippet: section_03.street.default -->
+<!-- character: semi -->
 נשוא חוות הדעת ממוקם ברחוב {street}, המהווה רחוב {street_type} {street_direction}.
 <!-- /snippet -->
 
 <!-- snippet: section_03.env_development -->
+<!-- character: fixed -->
 הפיתוח הסביבתי מלא וכולל כבישים, מדרכות, מים, חשמל, גינות ציבוריות ותאורת רחוב.
 <!-- /snippet -->
 
 <!-- snippet: section_03.lot.heading -->
+<!-- character: fixed -->
 תיאור החלקה
 <!-- /snippet -->
 
 <!-- snippet: section_03.lot.description -->
+<!-- character: semi -->
 חלקה {parcel} בגוש {block}, בה ממוקמת הדירה שבנדון, הינה בעלת טופוגרפיה {topography}, בצורה {lot_shape}, בשטח רשום של כ- {lot_area:.0f} מ"ר.
 <!-- /snippet -->
 
 <!-- snippet: section_03.boundary.north -->
+<!-- character: fixed -->
 מצפון
 <!-- /snippet -->
 
 <!-- snippet: section_03.boundary.south -->
+<!-- character: fixed -->
 מדרום
 <!-- /snippet -->
 
 <!-- snippet: section_03.boundary.east -->
+<!-- character: fixed -->
 ממזרח
 <!-- /snippet -->
 
 <!-- snippet: section_03.boundary.west -->
+<!-- character: fixed -->
 ממערב
 <!-- /snippet -->
 
 <!-- snippet: section_03.building.summary -->
+<!-- character: semi -->
 על החלקה הוקם בניין מגורים אשר נבנה בשנת {build_year}. הבניין מונה {total_floors} קומות מעל קומת {ground_floor_use} וכולל {units_count} יחידות דיור. מצבו הפיזי של הבניין {condition}.
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.heading -->
+<!-- character: fixed -->
 תיאור הדירה שבנדון
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.placeholder.air_directions -->
+<!-- character: variable -->
 [כיווני אוויר]
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.opening -->
+<!-- character: semi -->
 נשוא חוות הדעת מהווה דירה בת {rooms} חדרים אשר ממוקמת בקומה ה-{floor_ord} של הבניין ופונה לכיוון {air}.
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.area_built -->
+<!-- character: semi -->
 שטח הדירה הבנוי הינו כ-{built_area:.0f} מ"ר
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.area_balcony -->
+<!-- character: semi -->
  ומרפסת בשטח כ-{balcony_area:.0f} מ"ר
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.area_balcony_missing -->
+<!-- character: fixed -->
  ו[שטח מרפסת]
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.attachments -->
+<!-- character: semi -->
  לדירה צמודים: {att_str}.
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.attachment.parking_default -->
+<!-- character: fixed -->
 חניה
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.attachment.storage_default -->
+<!-- character: fixed -->
 מחסן
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.attachment.garden -->
+<!-- character: semi -->
 גינה בשטח {garden_area:.0f} מ"ר
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.interior.multi -->
+<!-- character: semi -->
 מבואה, סלון, מטבח, {bedrooms} חדרי שינה, חדר רחצה ושירותים
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.interior.single -->
+<!-- character: fixed -->
 חדר, מטבחון, חדר רחצה ושירותים
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.permit.with_balcony_unpermitted -->
+<!-- character: fixed -->
 ככלל הדירה בנויה בהתאם להיתר אולם לא אותר היתר לסגירת המרפסת.
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.permit.normal -->
+<!-- character: fixed -->
 הדירה בנויה בהתאם להיתר בנייה.
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.permit.violations -->
+<!-- character: fixed -->
 נמצאו חריגות בנייה בדירה.
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.rental -->
+<!-- character: semi -->
  נכון למועד הביקור, הדירה מושכרת לשוכר {tenant_name} בדמי שכירות חודשיים של {rent}.
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.ceiling.value -->
+<!-- character: semi -->
 כ-{ceiling_height:.1f}
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.ceiling.placeholder -->
+<!-- character: variable -->
 [גובה פנים]
 <!-- /snippet -->
 
 <!-- snippet: section_03.apt.detail -->
+<!-- character: semi -->
 {area_str}{att_str} חלוקת הדירה: {interior}. {finish_desc} גובה הפנים הינו {ceiling} מ'. {permit_str}{rental_str}
 <!-- /snippet -->
 
