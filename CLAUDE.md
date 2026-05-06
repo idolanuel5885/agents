@@ -247,29 +247,49 @@ Two distribution wrappers in the same module:
 
 ### B.6 Where fixed text and templates live
 
-There is no separate template layer and no templating engine. All text
-is in code:
+Report wording lives in `skills/*.md` as marked snippets, loaded at
+runtime by `real_estate/skill_loader.py`. The generator calls
+`skill_loader.get(id)` (literal text) or `skill_loader.render(id, **vars)`
+(template). Snippet markers look like:
+
+```
+<!-- snippet: section_03.apt.opening -->
+<!-- character: variable -->
+נשוא חוות הדעת מהווה דירה בת {rooms} חדרים ...
+<!-- /snippet -->
+```
+
+The optional `<!-- character: ... -->` line carries the section's A.5
+character (`fixed`/`semi`/`variable`).
 
 | Category | Location |
 |---|---|
 | Hebrew number-to-words dictionaries | `report_generator.py` top (`_ONES`, `_TENS`, `_HUNDREDS`, `_FLOOR_ORD`) |
-| Report purpose phrases | `report_generator.py:purpose_display` |
-| Rights type phrases | `report_generator.py:rights_display` |
-| Three "finish level" paragraphs (full prose: flooring, AC, windows, kitchen, bathroom) | `report_generator.py:finish_desc` |
-| All fixed report paragraphs (opening, "in accordance with…", "the valuation was conducted…", closing declarations) | embedded as f-strings in `_section_NN_*` |
-| Missing-field placeholders | `f"[{field name}]"` via `_opt(...)` |
+| Report purpose phrases | `skills/01_header.md` (`purpose.*`) |
+| Rights type phrases | `skills/02_property_details.md` (`rights.*`) |
+| Three "finish level" paragraphs | `skills/03_description.md` (`finish.*`) |
+| All fixed report paragraphs and templates (sections 01–07, photos, notes) | `skills/NN_*.md` (`section_NN.*`) |
+| Missing-field placeholders | `f"[{field name}]"` via `_opt(...)` (still in code; sentinel for empty data) |
 | Filename templates | `main.py:29` and `web.py:236` (RFC 5987 encoding for Hebrew filenames) |
 | Hebrew month names | `web.py:_HE_MONTHS` |
-| Enum→Hebrew label mappings | `web.py` (Web→Enum) and `form.py` (CLI→Enum), defined twice |
-| Output phrase mappings (`purpose_display` etc.) | `report_generator.py` (third copy of related logic) |
+| Enum→Hebrew label mappings (form input side) | `web.py` (Web→Enum) and `form.py` (CLI→Enum), defined twice |
 | Form CSS and UI strings | embedded in `shuma.html` |
 | Demo data (sample city/neighborhood text) | `real_estate/demo_data.py` |
 
+When asked to modify report wording, edit the snippet in the matching
+`skills/*.md` file; the generator picks it up automatically. When
+asked to modify generation structure or data flow, edit
+`report_generator.py`. If a wording change requires structural change
+too, do both.
+
 ### B.7 Skills directory
 
-A `skills/` directory at the repository root holds the canonical Hebrew text templates for each report section. Files are named by section number and English purpose. These files are the source of truth for report wording. Currently the report generator does not load from them — it has its own embedded strings in `report_generator.py` (see B.6). The skills directory is the target state; the embedded strings are the current state. Migrating from one to the other is a known pending task (see C.8).
-
-When asked to modify report wording, edit the corresponding file in `skills/`, not the embedded string in code. When asked to modify generation logic, edit `report_generator.py`. If a wording change requires a code change too, do both.
+`skills/*.md` files contain both human-readable guidance for each
+section and (under "## Generator snippets") the marked text blocks
+the generator loads via `real_estate/skill_loader.py`. The migration
+that wired the generator to these files is complete — embedded
+strings in `report_generator.py` have been removed and replaced with
+loader calls.
 
 ### B.8 RTL helper layer
 
@@ -302,9 +322,12 @@ no GIS library, no OAuth client. Add them as needed.
 ### B.10 Validation
 
 Client-side only (in `shuma.html` JS). No server-side validation. No
-tests directory. No linter config. No `.env.example` for the appraisal
-system itself (`ANTHROPIC_API_KEY` is used only by the unrelated agent
-runner).
+linter config. No `.env.example` for the appraisal system itself
+(`ANTHROPIC_API_KEY` is used only by the unrelated agent runner).
+Server-side coverage is provided by `tests/test_golden.py` (pytest):
+generates the three demo reports and hashes the extracted text — run
+with `UPDATE_GOLDEN=1 pytest tests/test_golden.py` to refresh after
+intentional wording changes.
 
 ---
 
@@ -364,17 +387,14 @@ report used these values from these sources at this time" would be
 valuable both for debugging and for the appraiser's professional
 defense.
 
-### C.7 No tests
+### C.7 Limited test coverage
 
-There is no `tests/` directory and no `pytest` in requirements. The
-only validation is client-side in `shuma.html`. Any change to
-report generation is verified manually by generating and inspecting
-demo reports. A handful of golden-file tests on the demo outputs
-would catch most regressions.
-
-### C.8 Skills directory exists but is not yet wired into the generator
-
-The `skills/` directory contains templates as text files, but `report_generator.py` still uses its own embedded strings. The two need to be unified. This is a planned migration but has not been done yet. Until it is done, edits to `skills/` files do not affect generated reports.
+`tests/test_golden.py` covers the three demo reports end-to-end via
+text-content hashes. There is no unit coverage of `skill_loader`,
+`docx_utils`, or the `web.py` request handler, and no schema check
+that every snippet referenced from `report_generator.py` actually
+exists in `skills/` (a typo would only be caught at generation time
+for the unlucky code path).
 
 ### C.9 Skill files referenced yad2 and madlan, which are not approved data sources
 
