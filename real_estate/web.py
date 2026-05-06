@@ -4,15 +4,18 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel
+from typing import List
 
 from .models import (
     PropertyInput, ReportPurpose, RightsType, FinishLevel,
     PermitStatus, ClientGender,
 )
 from .report_generator import generate_report_bytes
+
+def _bool(v: str) -> bool:
+    return str(v).lower() in ("true", "1", "on", "yes")
 
 router = APIRouter(prefix="/shuma", tags=["shuma"])
 
@@ -69,40 +72,6 @@ async def get_form():
 
 # ── Generation endpoint ───────────────────────────────────────────────────────
 
-class FormPayload(BaseModel):
-    # Required
-    purpose: str
-    rights_type: str
-    client_gender: str
-    client_name: str
-    address: str
-    block: str
-    parcel: str
-    sub_parcel: str
-    rooms: str
-    floor: str
-    registered_area: str
-    built_area: str
-    final_value: str
-    # Optional
-    air_directions: str = ""
-    build_year: str = ""
-    total_floors: str = ""
-    units_count: str = ""
-    ceiling_height: str = ""
-    balcony_area: str = ""
-    finish_level: str = ""
-    has_parking: bool = False
-    has_storage: bool = False
-    has_garden: bool = False
-    tenant_name: str = ""
-    monthly_rent: str = ""
-    rental_end_date: str = ""
-    purchase_date: str = ""
-    purchase_price: str = ""
-    notes: str = ""
-
-
 _PURPOSE_MAP = {
     "שוק": ReportPurpose.MARKET,
     "תקן_19": ReportPurpose.STANDARD_19,
@@ -127,71 +96,113 @@ _FINISH_MAP = {
 
 
 @router.post("/generate")
-async def generate(payload: FormPayload):
+async def generate(
+    purpose: str = Form(...),
+    rights_type: str = Form(...),
+    client_gender: str = Form(...),
+    client_name: str = Form(...),
+    address: str = Form(...),
+    block: str = Form(...),
+    parcel: str = Form(...),
+    sub_parcel: str = Form(...),
+    rooms: str = Form(...),
+    floor: str = Form(...),
+    registered_area: str = Form(...),
+    built_area: str = Form(...),
+    final_value: str = Form(...),
+    air_directions: str = Form(""),
+    build_year: str = Form(""),
+    total_floors: str = Form(""),
+    units_count: str = Form(""),
+    ceiling_height: str = Form(""),
+    balcony_area: str = Form(""),
+    finish_level: str = Form(""),
+    has_parking: str = Form("false"),
+    has_storage: str = Form("false"),
+    has_garden: str = Form("false"),
+    tenant_name: str = Form(""),
+    monthly_rent: str = Form(""),
+    rental_end_date: str = Form(""),
+    purchase_date: str = Form(""),
+    purchase_price: str = Form(""),
+    notes: str = Form(""),
+    street_description: str = Form(""),
+    property_images: List[UploadFile] = File([]),
+    plan_docs: List[UploadFile] = File([]),
+    plan_types: List[str] = Form([]),
+):
     today = _today_str()
-    city, street, house_num = _parse_address(payload.address)
+    city, street, house_num = _parse_address(address)
 
-    is_rented = bool(payload.tenant_name.strip())
+    is_rented = bool(tenant_name.strip())
+    parking = _bool(has_parking)
+    storage = _bool(has_storage)
+    garden = _bool(has_garden)
 
-    rental_end = (
-        _date_html_to_display(payload.rental_end_date)
-        if payload.rental_end_date else ""
-    )
-    purchase_date = (
-        _date_html_to_display(payload.purchase_date)
-        if payload.purchase_date else ""
-    )
+    rental_end = _date_html_to_display(rental_end_date) if rental_end_date else ""
+    purch_date = _date_html_to_display(purchase_date) if purchase_date else ""
+
+    img_bytes: List[bytes] = []
+    for f in property_images:
+        if f.filename:
+            img_bytes.append(await f.read())
+
+    plan_imgs: List[tuple] = []
+    for f, t in zip(plan_docs, plan_types):
+        if f.filename:
+            plan_imgs.append((t, await f.read()))
 
     data = PropertyInput(
         report_number=f"WEB-{date.today().strftime('%Y%m%d')}",
         report_date=today,
         determining_date=_today_hebrew(),
         visit_date=today,
-        report_purpose=_PURPOSE_MAP.get(payload.purpose, ReportPurpose.MARKET),
-        client_name=payload.client_name.strip(),
-        client_gender=_GENDER_MAP.get(payload.client_gender, ClientGender.MALE),
+        report_purpose=_PURPOSE_MAP.get(purpose, ReportPurpose.MARKET),
+        client_name=client_name.strip(),
+        client_gender=_GENDER_MAP.get(client_gender, ClientGender.MALE),
         city=city,
         street=street,
         house_number=house_num,
-        address=payload.address.strip(),
-        block=payload.block.strip(),
-        parcel=payload.parcel.strip(),
-        sub_parcel=payload.sub_parcel.strip(),
-        rights_type=_RIGHTS_MAP.get(payload.rights_type, RightsType.PRIVATE),
-        rights_owner=payload.client_name.strip(),
+        address=address.strip(),
+        block=block.strip(),
+        parcel=parcel.strip(),
+        sub_parcel=sub_parcel.strip(),
+        rights_type=_RIGHTS_MAP.get(rights_type, RightsType.PRIVATE),
+        rights_owner=client_name.strip(),
         common_property_share="יש להשלים",
         registration_date=today,
-        floor_description=f"קומה {payload.floor}",
-        build_year=_i(payload.build_year),
-        total_floors=_i(payload.total_floors),
-        units_count=_i(payload.units_count),
+        floor_description=f"קומה {floor}",
+        build_year=_i(build_year),
+        total_floors=_i(total_floors),
+        units_count=_i(units_count),
         ground_floor_use="כניסה ולובי",
         building_physical_condition="תקין",
-        rooms=_f(payload.rooms, 3.0),
-        floor=_i(payload.floor),
-        air_directions=payload.air_directions.strip() or "יש להשלים",
-        registered_area=_f(payload.registered_area),
-        built_area=_f(payload.built_area),
-        balcony_area=_f(payload.balcony_area, 0.0),
-        ceiling_height=_f(payload.ceiling_height, 2.7) or 2.7,
+        rooms=_f(rooms, 3.0),
+        floor=_i(floor),
+        air_directions=air_directions.strip(),
+        registered_area=_f(registered_area),
+        built_area=_f(built_area),
+        balcony_area=_f(balcony_area, 0.0),
+        ceiling_height=_f(ceiling_height, 2.7) or 2.7,
         permit_status=PermitStatus.PERMIT,
-        finish_level=_FINISH_MAP.get(payload.finish_level, FinishLevel.GOOD),
-        has_parking=payload.has_parking,
-        parking_description="חניה" if payload.has_parking else "",
-        has_storage=payload.has_storage,
-        storage_description="מחסן" if payload.has_storage else "",
-        has_garden=payload.has_garden,
+        finish_level=_FINISH_MAP.get(finish_level, FinishLevel.GOOD),
+        has_parking=parking,
+        parking_description="חניה" if parking else "",
+        has_storage=storage,
+        storage_description="מחסן" if storage else "",
+        has_garden=garden,
         garden_area=0.0,
         is_rented=is_rented,
-        tenant_name=payload.tenant_name.strip(),
-        landlord_name=payload.client_name.strip(),
+        tenant_name=tenant_name.strip(),
+        landlord_name=client_name.strip(),
         rental_agreement_date="יש להשלים" if is_rented else "",
         rental_start_date="יש להשלים" if is_rented else "",
         rental_end_date=rental_end,
-        monthly_rent=_f(payload.monthly_rent, 0.0),
+        monthly_rent=_f(monthly_rent, 0.0),
         city_description=f"{city} — יש להשלים תיאור עיר.",
         neighborhood_name="יש להשלים",
         neighborhood_description="יש להשלים — תיאור השכונה.",
+        street_description=street_description.strip(),
         street_type="פנימי",
         street_direction="דו-סטרי",
         lot_area=0.0,
@@ -211,11 +222,13 @@ async def generate(payload: FormPayload):
         balcony_closed_without_permit=False,
         zoning_for_principles="יש להשלים",
         comparison_properties=[],
-        sqm_equiv_price=_f(payload.final_value) / (_f(payload.built_area) or 1),
-        final_value=_f(payload.final_value),
-        purchase_date=purchase_date,
-        purchase_price=_f(payload.purchase_price, 0.0),
-        special_notes=payload.notes.strip(),
+        sqm_equiv_price=_f(final_value) / (_f(built_area) or 1),
+        final_value=_f(final_value),
+        purchase_date=purch_date,
+        purchase_price=_f(purchase_price, 0.0),
+        special_notes=notes.strip(),
+        property_images=img_bytes,
+        planning_images=plan_imgs,
     )
 
     docx_bytes = generate_report_bytes(data)

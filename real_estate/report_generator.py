@@ -90,10 +90,10 @@ def fmt_ils(amount: float) -> str:
     return f"{amount:,.0f} ₪"
 
 
-def _opt(val, suffix: str = "") -> str:
-    """Return val+suffix or 'יש להשלים' for falsy values."""
+def _opt(val, field_name: str = "ערך חסר", suffix: str = "") -> str:
+    """Return val+suffix or '[field_name]' for falsy values."""
     if val is None or val == "" or val == 0:
-        return "יש להשלים"
+        return f"[{field_name}]"
     return f"{val}{suffix}"
 
 
@@ -229,24 +229,38 @@ def _section_02_details_table(doc: Document, d: PropertyInput):
     add_para(doc, "")
 
 
+def _embed_images(doc: Document, images: list, width_cm: float = 7.5):
+    """Embed a list of image bytes in a 2-column table."""
+    if not images:
+        return
+    n_rows = (len(images) + 1) // 2
+    tbl = make_table(doc, n_rows, 2, col_widths_cm=[width_cm, width_cm])
+    for idx, img_bytes in enumerate(images):
+        cell = tbl.rows[idx // 2].cells[idx % 2]
+        try:
+            cell.paragraphs[0].add_run().add_picture(io.BytesIO(img_bytes), width=Cm(width_cm))
+        except Exception:
+            cell.paragraphs[0].add_run("[תמונה לא תקינה]")
+    add_para(doc, "")
+
+
 def _section_03_description(doc: Document, d: PropertyInput):
     """תיאור הנכס והסביבה"""
     add_heading(doc, "תיאור הנכס והסביבה")
 
+    # ── 3 environment paragraphs ──────────────────────────────────
     add_heading(doc, "תיאור הסביבה הכללית", level=2)
-    add_para(doc, d.city_description)
-    add_para(doc, d.neighborhood_description)
-    add_para(
-        doc,
-        f"נשוא חוות הדעת ממוקם ברחוב {d.street}, "
-        f"המהווה רחוב {d.street_type} {d.street_direction}."
+    add_para(doc, d.city_description or "[תיאור העיר]")
+    add_para(doc, d.neighborhood_description or "[תיאור השכונה]")
+    street_para = (
+        d.street_description
+        or f"נשוא חוות הדעת ממוקם ברחוב {d.street}, "
+           f"המהווה רחוב {d.street_type} {d.street_direction}."
     )
-    add_para(
-        doc,
-        "הפיתוח הסביבתי מלא וכולל כבישים, מדרכות, מים, חשמל, "
-        "גינות ציבוריות ותאורת רחוב."
-    )
+    add_para(doc, street_para)
+    add_para(doc, "הפיתוח הסביבתי מלא וכולל כבישים, מדרכות, מים, חשמל, גינות ציבוריות ותאורת רחוב.")
 
+    # ── Lot ──────────────────────────────────────────────────────
     add_heading(doc, "תיאור החלקה", level=2)
     add_para(
         doc,
@@ -255,40 +269,40 @@ def _section_03_description(doc: Document, d: PropertyInput):
         f"בשטח רשום של כ- {d.lot_area:.0f} מ\"ר."
     )
 
-    # Boundaries table
     btbl = make_table(doc, 4, 2, col_widths_cm=[3, 13])
-    boundaries = [
-        ("מצפון", d.north_boundary),
-        ("מדרום", d.south_boundary),
-        ("ממזרח", d.east_boundary),
-        ("ממערב", d.west_boundary),
-    ]
-    for i, (direction, desc) in enumerate(boundaries):
+    for i, (direction, desc) in enumerate([
+        ("מצפון", d.north_boundary), ("מדרום", d.south_boundary),
+        ("ממזרח", d.east_boundary),  ("ממערב", d.west_boundary),
+    ]):
         set_cell(btbl.rows[i].cells[0], direction, bold=True)
         set_cell(btbl.rows[i].cells[1], desc)
 
     add_para(doc, "")
     add_para(
         doc,
-        f"על החלקה הוקם בניין מגורים אשר נבנה בשנת {_opt(d.build_year)}. "
-        f"הבניין מונה {_opt(d.total_floors)} קומות מעל קומת {d.ground_floor_use} "
-        f"וכולל {_opt(d.units_count)} יחידות דיור. "
+        f"על החלקה הוקם בניין מגורים אשר נבנה בשנת {_opt(d.build_year, 'שנת בנייה')}. "
+        f"הבניין מונה {_opt(d.total_floors, 'קומות')} קומות מעל קומת {d.ground_floor_use} "
+        f"וכולל {_opt(d.units_count, 'יחידות דיור')} יחידות דיור. "
         f"מצבו הפיזי של הבניין {d.building_physical_condition}."
     )
 
+    # ── Apartment — 2-paragraph structure ────────────────────────
     add_heading(doc, "תיאור הדירה שבנדון", level=2)
-
     floor_o = floor_ord(d.floor)
+    air = d.air_directions or "[כיווני אוויר]"
+    # § 1 — bold opening
     add_para(
         doc,
         f"נשוא חוות הדעת מהווה דירה בת {d.rooms} חדרים אשר ממוקמת בקומה ה-{floor_o} "
-        f"של הבניין ופונה לכיוון {d.air_directions}.",
+        f"של הבניין ופונה לכיוון {air}.",
         bold=True,
     )
-
+    # § 2 — detail paragraph
     area_str = f"שטח הדירה הבנוי הינו כ-{d.built_area:.0f} מ\"ר"
     if d.balcony_area > 0:
         area_str += f" ומרפסת בשטח כ-{d.balcony_area:.0f} מ\"ר"
+    else:
+        area_str += f" ו[שטח מרפסת]"
     area_str += "."
 
     att_parts = []
@@ -300,36 +314,30 @@ def _section_03_description(doc: Document, d: PropertyInput):
         att_parts.append(f"גינה בשטח {d.garden_area:.0f} מ\"ר")
     att_str = f" לדירה צמודים: {', '.join(att_parts)}." if att_parts else ""
 
+    rooms_int = int(d.rooms)
+    interior = (
+        f"מבואה, סלון, מטבח, {rooms_int - 1} חדרי שינה, חדר רחצה ושירותים"
+        if rooms_int >= 2 else "חדר, מטבחון, חדר רחצה ושירותים"
+    )
+
     if d.permit_status == PermitStatus.PERMIT:
-        permit_str = (
-            "ככלל הדירה בנויה בהתאם להיתר אולם לא אותר היתר לסגירת המרפסת."
-            if d.balcony_closed_without_permit
-            else "הדירה בנויה בהתאם להיתר בנייה."
-        )
+        permit_str = ("ככלל הדירה בנויה בהתאם להיתר אולם לא אותר היתר לסגירת המרפסת."
+                      if d.balcony_closed_without_permit else "הדירה בנויה בהתאם להיתר בנייה.")
     else:
         permit_str = "נמצאו חריגות בנייה בדירה."
 
-    rental_str = ""
-    if d.is_rented:
-        rental_str = (
-            f" נכון למועד הביקור, הדירה מושכרת לשוכר {d.tenant_name} "
-            f"בדמי שכירות חודשיים של {fmt_ils(d.monthly_rent)}."
-        )
+    rental_str = (
+        f" נכון למועד הביקור, הדירה מושכרת לשוכר {d.tenant_name} "
+        f"בדמי שכירות חודשיים של {fmt_ils(d.monthly_rent)}."
+        if d.is_rented else ""
+    )
 
-    rooms_int = int(d.rooms)
-    interior = (
-        f"מבואה, סלון, מטבח, {rooms_int - 1} חדרי שינה, "
-        f"חדר רחצה ושירותים"
-    ) if rooms_int >= 2 else "חדר, מטבחון, חדר רחצה ושירותים"
-
+    ceiling = f"כ-{d.ceiling_height:.1f}" if d.ceiling_height else "[גובה פנים]"
     add_para(
         doc,
-        f"{area_str}{att_str} "
-        f"חלוקת הדירה: {interior}. "
+        f"{area_str}{att_str} חלוקת הדירה: {interior}. "
         f"{finish_desc(d.finish_level)} "
-        f"גובה הפנים הינו כ-{d.ceiling_height:.1f} מ'. "
-        f"{permit_str}"
-        f"{rental_str}"
+        f"גובה הפנים הינו {ceiling} מ'. {permit_str}{rental_str}"
     )
 
 
@@ -362,9 +370,9 @@ def _section_04_planning(doc: Document, d: PropertyInput):
     if not d.has_original_permit:
         add_bullet(doc, "לא אותר היתר הבנייה המקורי של הבניין. יש להשלים.")
     else:
-        permit_num = _opt(d.building_permit_number)
-        permit_date = _opt(d.building_permit_date)
-        permit_allowed = _opt(d.building_permit_allowed)
+        permit_num = _opt(d.building_permit_number, 'מספר היתר')
+        permit_date = _opt(d.building_permit_date, 'תאריך היתר')
+        permit_allowed = _opt(d.building_permit_allowed, 'מה הותר')
         add_bullet(
             doc,
             f"היתר בנייה מספר {permit_num} "
@@ -372,13 +380,16 @@ def _section_04_planning(doc: Document, d: PropertyInput):
             f"אשר התיר {permit_allowed}."
         )
         if d.has_completion_cert:
-            add_bullet(doc, f"תעודת גמר מתאריך {_opt(d.completion_cert_date)}.")
+            add_bullet(doc, f"תעודת גמר מתאריך {_opt(d.completion_cert_date, 'תאריך תעודת גמר')}.")
 
     if d.balcony_closed_without_permit:
         add_para(
             doc,
             "ככלל הדירה בנויה בהתאם להיתר אולם לא אותר היתר לסגירת המרפסת."
         )
+
+    imgs = [b for t, b in d.planning_images if t == "04"]
+    _embed_images(doc, imgs)
 
 
 def _section_05_legal(doc: Document, d: PropertyInput):
@@ -433,6 +444,9 @@ def _section_05_legal(doc: Document, d: PropertyInput):
             set_cell(rnttbl.rows[i].cells[0], lbl, bold=True)
             set_cell(rnttbl.rows[i].cells[1], val)
 
+    imgs = [b for t, b in d.planning_images if t == "05"]
+    _embed_images(doc, imgs)
+
 
 def _section_06_valuation(doc: Document, d: PropertyInput):
     """עקרונות + נתוני השוואה + שומה"""
@@ -475,7 +489,7 @@ def _section_06_valuation(doc: Document, d: PropertyInput):
     ]
     if d.has_original_permit:
         planning_bullets.append(
-            f"הדירה שבנדון בנויה בהתאם להיתר בנייה משנת {_opt(d.build_year)}."
+            f"הדירה שבנדון בנויה בהתאם להיתר בנייה משנת {_opt(d.build_year, 'שנת בנייה')}."
         )
     else:
         planning_bullets.append("לא אותר היתר הבנייה המקורי של הבניין.")
@@ -638,6 +652,13 @@ def _section_07_tax(doc: Document, d: PropertyInput):
         set_cell(ttbl.rows[i].cells[1], val, bold=bold_row)
 
 
+def _section_photos(doc: Document, d: PropertyInput):
+    if not d.property_images:
+        return
+    add_heading(doc, "תצלומי הנכס")
+    _embed_images(doc, d.property_images, width_cm=7.5)
+
+
 def _section_notes(doc: Document, d: PropertyInput):
     """הערות מיוחדות — appears only when special_notes is set."""
     if not d.special_notes:
@@ -656,6 +677,9 @@ def _build_doc(data: PropertyInput) -> Document:
     _section_02_details_table(doc, data)
     doc.add_page_break()
     _section_03_description(doc, data)
+    if data.property_images:
+        doc.add_page_break()
+        _section_photos(doc, data)
     doc.add_page_break()
     _section_04_planning(doc, data)
     doc.add_page_break()

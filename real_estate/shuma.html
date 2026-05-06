@@ -426,6 +426,53 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════ NEW: תיאור הרחוב -->
+  <div class="card">
+    <div class="card-header">
+      <h2>תיאור הרחוב</h2>
+      <span class="badge-opt">אופציונלי</span>
+    </div>
+    <div class="f">
+      <label>תיאור הרחוב (פסקה חופשית)</label>
+      <textarea id="street_description" name="street_description" rows="3"
+                placeholder="לדוגמה: רחוב הרצל הוא רחוב ראשי דו-סטרי המהווה ציר מרכזי בעיר..."></textarea>
+      <span class="hint">אם לא תמולא, יופיע טקסט ברירת מחדל המתאר את הרחוב.</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ NEW: תמונות הנכס -->
+  <div class="card">
+    <div class="card-header">
+      <h2>תמונות הנכס</h2>
+      <span class="badge-opt">אופציונלי</span>
+    </div>
+    <div class="f">
+      <label>העלה תמונות (עד 8)</label>
+      <input type="file" id="property_images_input" accept="image/*" multiple
+             style="padding:6px 0; border:none; box-shadow:none;">
+      <span class="hint">JPG, PNG — מקסימום 8 תמונות. יוצגו בדוח בגריד 2 עמודות.</span>
+    </div>
+    <div id="img-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ NEW: מסמכים תכנוניים -->
+  <div class="card">
+    <div class="card-header">
+      <h2>מסמכים תכנוניים</h2>
+      <span class="badge-opt">אופציונלי</span>
+    </div>
+    <div id="plan-rows"></div>
+    <button type="button" onclick="addPlanRow()"
+            style="margin-top:6px; padding:7px 16px; border:1.5px dashed #93c5fd;
+                   background:#eff6ff; color:#1d4ed8; border-radius:8px;
+                   font-size:14px; font-weight:600; cursor:pointer;">
+      + הוסף מסמך
+    </button>
+    <p class="hint" style="margin-top:8px;">
+      בחר לאיזה סעיף לשייך כל מסמך: סעיף 04 — רקע תכנוני / סעיף 05 — מצב משפטי
+    </p>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════════ 06 — תקן 19 -->
   <div class="card hidden" id="sec-teken19">
     <div class="card-header">
@@ -537,15 +584,70 @@
     return ok;
   }
 
-  // ── Collect all form values ───────────────────────────────────────────────
-  function collect() {
-    const data = {};
-    document.querySelectorAll('#form input:not([type="checkbox"]), #form select, #form textarea')
-      .forEach(el => { if (el.name) data[el.name] = el.value; });
-    ['has_parking', 'has_storage', 'has_garden'].forEach(n => {
-      data[n] = document.getElementById(n).checked;
+  // ── Planning doc rows ─────────────────────────────────────────────────────
+  function addPlanRow() {
+    const container = document.getElementById('plan-rows');
+    const row = document.createElement('div');
+    row.className = 'plan-row';
+    row.style.cssText = 'display:flex;gap:10px;align-items:center;margin-bottom:10px;';
+    row.innerHTML = `
+      <input type="file" class="plan-file" accept=".pdf,.jpg,.jpeg,.png,.docx"
+             style="flex:1;padding:6px 0;border:none;box-shadow:none;">
+      <select class="plan-type"
+              style="width:220px;padding:8px 10px;border:1.5px solid #d1d5db;
+                     border-radius:8px;font-size:14px;direction:rtl;">
+        <option value="04">סעיף 04 — רקע תכנוני</option>
+        <option value="05">סעיף 05 — מצב משפטי</option>
+      </select>
+      <button type="button" onclick="this.closest('.plan-row').remove()"
+              style="padding:6px 12px;background:#fee2e2;color:#dc2626;
+                     border:none;border-radius:8px;cursor:pointer;font-size:16px;font-weight:700;">✕</button>
+    `;
+    container.appendChild(row);
+  }
+
+  // ── Image preview ─────────────────────────────────────────────────────────
+  document.getElementById('property_images_input').addEventListener('change', function () {
+    const preview = document.getElementById('img-preview');
+    preview.innerHTML = '';
+    const files = Array.from(this.files).slice(0, 8);
+    files.forEach(f => {
+      const img = document.createElement('img');
+      img.style.cssText = 'width:100px;height:80px;object-fit:cover;border-radius:6px;border:1.5px solid #d1d5db;';
+      img.src = URL.createObjectURL(f);
+      preview.appendChild(img);
     });
-    return data;
+    if (this.files.length > 8) {
+      const warn = document.createElement('p');
+      warn.style.cssText = 'color:#dc2626;font-size:13px;margin-top:4px;width:100%;';
+      warn.textContent = 'נבחרו יותר מ-8 תמונות — רק 8 הראשונות ייכללו בדוח.';
+      preview.appendChild(warn);
+    }
+  });
+
+  // ── Build FormData ────────────────────────────────────────────────────────
+  function buildFormData() {
+    const fd = new FormData();
+    // Text fields, selects, textareas (skip file inputs and checkboxes)
+    document.querySelectorAll('#form input:not([type="checkbox"]):not([type="file"]), #form select, #form textarea')
+      .forEach(el => { if (el.name) fd.append(el.name, el.value); });
+    // Checkboxes — always send explicitly
+    ['has_parking', 'has_storage', 'has_garden'].forEach(n => {
+      fd.append(n, document.getElementById(n).checked ? 'true' : 'false');
+    });
+    // Property images (up to 8)
+    const imgFiles = Array.from(document.getElementById('property_images_input').files).slice(0, 8);
+    imgFiles.forEach(f => fd.append('property_images', f));
+    // Planning documents
+    document.querySelectorAll('.plan-row').forEach(row => {
+      const fi = row.querySelector('.plan-file');
+      const ts = row.querySelector('.plan-type');
+      if (fi.files[0]) {
+        fd.append('plan_docs', fi.files[0]);
+        fd.append('plan_types', ts.value);
+      }
+    });
+    return fd;
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -564,9 +666,8 @@
 
     try {
       const resp = await fetch('/shuma/generate', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(collect()),
+        method: 'POST',
+        body:   buildFormData(),
       });
 
       if (!resp.ok) {
