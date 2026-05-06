@@ -119,23 +119,10 @@ def purpose_display(p: ReportPurpose) -> str:
 
 
 def finish_desc(level: FinishLevel) -> str:
-    if level == FinishLevel.BASIC:
-        return (
-            "רמת הגמר בסיסית וכוללת ריצוף באריחי גרניט פורצלן, מזגנים עיליים, "
-            "חלונות זכוכית עם פרופיל אלומיניום, דלת פלדלת, מטבח ארונות עץ ומשטח שיש, "
-            "אריחי קרמיקה בחדר הרחצה ואסלת מונובלוק."
-        )
-    if level == FinishLevel.GOOD:
-        return (
-            "רמת הגמר טובה וכוללת ריצוף באריחי גרניט פורצלן בפורמט גדול, מזגנים עיליים, "
-            "תריסים חשמליים, חלונות זכוכית עם פרופיל אלומיניום, דלת פלדלת, "
-            "מטבח ארונות עץ ומשטח שיש, אריחי קרמיקה בחדר הרחצה ואסלת מונובלוק."
-        )
-    return (
-        "רמת הגמר טובה מאוד וכוללת ריצוף פרקט, מזגן מרכזי, "
-        "תריסים חשמליים, חלונות זכוכית בפרופיל אלומיניום ברמה גבוהה, דלת פלדלת, "
-        "מטבח מעוצב עם ציוד מובנה, חיפוי מיוחד בחדרי הרחצה."
-    )
+    return skill_loader.get({
+        FinishLevel.BASIC: "finish.basic",
+        FinishLevel.GOOD: "finish.good",
+    }.get(level, "finish.luxury"))
 
 
 # ── Section builders ──────────────────────────────────────────────────────────
@@ -277,98 +264,125 @@ def _embed_images(doc: Document, images: list, width_cm: float = 7.5):
 
 def _section_03_description(doc: Document, d: PropertyInput):
     """תיאור הנכס והסביבה"""
-    add_heading(doc, "תיאור הנכס והסביבה")
+    add_heading(doc, skill_loader.get("section_03.heading"))
 
     # ── 3 environment paragraphs ──────────────────────────────────
-    add_heading(doc, "תיאור הסביבה הכללית", level=2)
-    add_para(doc, d.city_description or "[תיאור העיר]")
-    add_para(doc, d.neighborhood_description or "[תיאור השכונה]")
-    street_para = (
-        d.street_description
-        or f"נשוא חוות הדעת ממוקם ברחוב {d.street}, "
-           f"המהווה רחוב {d.street_type} {d.street_direction}."
+    add_heading(doc, skill_loader.get("section_03.environment.heading"), level=2)
+    add_para(doc, d.city_description or skill_loader.get("section_03.placeholder.city"))
+    add_para(doc, d.neighborhood_description or skill_loader.get("section_03.placeholder.neighborhood"))
+    street_para = d.street_description or skill_loader.render(
+        "section_03.street.default",
+        street=d.street, street_type=d.street_type, street_direction=d.street_direction,
     )
     add_para(doc, street_para)
-    add_para(doc, "הפיתוח הסביבתי מלא וכולל כבישים, מדרכות, מים, חשמל, גינות ציבוריות ותאורת רחוב.")
+    add_para(doc, skill_loader.get("section_03.env_development"))
 
     # ── Lot ──────────────────────────────────────────────────────
-    add_heading(doc, "תיאור החלקה", level=2)
+    add_heading(doc, skill_loader.get("section_03.lot.heading"), level=2)
     add_para(
         doc,
-        f"חלקה {d.parcel} בגוש {d.block}, בה ממוקמת הדירה שבנדון, "
-        f"הינה בעלת טופוגרפיה {d.topography}, בצורה {d.lot_shape}, "
-        f"בשטח רשום של כ- {d.lot_area:.0f} מ\"ר."
+        skill_loader.render(
+            "section_03.lot.description",
+            parcel=d.parcel, block=d.block,
+            topography=d.topography, lot_shape=d.lot_shape, lot_area=d.lot_area,
+        )
     )
 
     btbl = make_table(doc, 4, 2, col_widths_cm=[3, 13])
-    for i, (direction, desc) in enumerate([
-        ("מצפון", d.north_boundary), ("מדרום", d.south_boundary),
-        ("ממזרח", d.east_boundary),  ("ממערב", d.west_boundary),
+    for i, (dir_id, desc) in enumerate([
+        ("section_03.boundary.north", d.north_boundary),
+        ("section_03.boundary.south", d.south_boundary),
+        ("section_03.boundary.east",  d.east_boundary),
+        ("section_03.boundary.west",  d.west_boundary),
     ]):
-        set_cell(btbl.rows[i].cells[0], direction, bold=True)
+        set_cell(btbl.rows[i].cells[0], skill_loader.get(dir_id), bold=True)
         set_cell(btbl.rows[i].cells[1], desc)
 
     add_para(doc, "")
     add_para(
         doc,
-        f"על החלקה הוקם בניין מגורים אשר נבנה בשנת {_opt(d.build_year, 'שנת בנייה')}. "
-        f"הבניין מונה {_opt(d.total_floors, 'קומות')} קומות מעל קומת {d.ground_floor_use} "
-        f"וכולל {_opt(d.units_count, 'יחידות דיור')} יחידות דיור. "
-        f"מצבו הפיזי של הבניין {d.building_physical_condition}."
+        skill_loader.render(
+            "section_03.building.summary",
+            build_year=_opt(d.build_year, 'שנת בנייה'),
+            total_floors=_opt(d.total_floors, 'קומות'),
+            ground_floor_use=d.ground_floor_use,
+            units_count=_opt(d.units_count, 'יחידות דיור'),
+            condition=d.building_physical_condition,
+        )
     )
 
     # ── Apartment — 2-paragraph structure ────────────────────────
-    add_heading(doc, "תיאור הדירה שבנדון", level=2)
+    add_heading(doc, skill_loader.get("section_03.apt.heading"), level=2)
     floor_o = floor_ord(d.floor)
-    air = d.air_directions or "[כיווני אוויר]"
+    air = d.air_directions or skill_loader.get("section_03.apt.placeholder.air_directions")
     # § 1 — bold opening
     add_para(
         doc,
-        f"נשוא חוות הדעת מהווה דירה בת {d.rooms} חדרים אשר ממוקמת בקומה ה-{floor_o} "
-        f"של הבניין ופונה לכיוון {air}.",
+        skill_loader.render(
+            "section_03.apt.opening",
+            rooms=d.rooms, floor_ord=floor_o, air=air,
+        ),
         bold=True,
     )
     # § 2 — detail paragraph
-    area_str = f"שטח הדירה הבנוי הינו כ-{d.built_area:.0f} מ\"ר"
+    area_str = skill_loader.render("section_03.apt.area_built", built_area=d.built_area)
     if d.balcony_area > 0:
-        area_str += f" ומרפסת בשטח כ-{d.balcony_area:.0f} מ\"ר"
+        area_str += skill_loader.render("section_03.apt.area_balcony", balcony_area=d.balcony_area)
     else:
-        area_str += f" ו[שטח מרפסת]"
+        area_str += skill_loader.get("section_03.apt.area_balcony_missing")
     area_str += "."
 
     att_parts = []
     if d.has_parking:
-        att_parts.append(d.parking_description or "חניה")
+        att_parts.append(d.parking_description
+                         or skill_loader.get("section_03.apt.attachment.parking_default"))
     if d.has_storage:
-        att_parts.append(d.storage_description or "מחסן")
+        att_parts.append(d.storage_description
+                         or skill_loader.get("section_03.apt.attachment.storage_default"))
     if d.has_garden:
-        att_parts.append(f"גינה בשטח {d.garden_area:.0f} מ\"ר")
-    att_str = f" לדירה צמודים: {', '.join(att_parts)}." if att_parts else ""
+        att_parts.append(skill_loader.render(
+            "section_03.apt.attachment.garden", garden_area=d.garden_area))
+    att_str = (
+        skill_loader.render("section_03.apt.attachments", att_str=', '.join(att_parts))
+        if att_parts else ""
+    )
 
     rooms_int = int(d.rooms)
     interior = (
-        f"מבואה, סלון, מטבח, {rooms_int - 1} חדרי שינה, חדר רחצה ושירותים"
-        if rooms_int >= 2 else "חדר, מטבחון, חדר רחצה ושירותים"
+        skill_loader.render("section_03.apt.interior.multi", bedrooms=rooms_int - 1)
+        if rooms_int >= 2 else skill_loader.get("section_03.apt.interior.single")
     )
 
     if d.permit_status == PermitStatus.PERMIT:
-        permit_str = ("ככלל הדירה בנויה בהתאם להיתר אולם לא אותר היתר לסגירת המרפסת."
-                      if d.balcony_closed_without_permit else "הדירה בנויה בהתאם להיתר בנייה.")
+        permit_str = skill_loader.get(
+            "section_03.apt.permit.with_balcony_unpermitted"
+            if d.balcony_closed_without_permit
+            else "section_03.apt.permit.normal"
+        )
     else:
-        permit_str = "נמצאו חריגות בנייה בדירה."
+        permit_str = skill_loader.get("section_03.apt.permit.violations")
 
     rental_str = (
-        f" נכון למועד הביקור, הדירה מושכרת לשוכר {d.tenant_name} "
-        f"בדמי שכירות חודשיים של {fmt_ils(d.monthly_rent)}."
+        skill_loader.render(
+            "section_03.apt.rental",
+            tenant_name=d.tenant_name, rent=fmt_ils(d.monthly_rent),
+        )
         if d.is_rented else ""
     )
 
-    ceiling = f"כ-{d.ceiling_height:.1f}" if d.ceiling_height else "[גובה פנים]"
+    ceiling = (
+        skill_loader.render("section_03.apt.ceiling.value", ceiling_height=d.ceiling_height)
+        if d.ceiling_height
+        else skill_loader.get("section_03.apt.ceiling.placeholder")
+    )
     add_para(
         doc,
-        f"{area_str}{att_str} חלוקת הדירה: {interior}. "
-        f"{finish_desc(d.finish_level)} "
-        f"גובה הפנים הינו {ceiling} מ'. {permit_str}{rental_str}"
+        skill_loader.render(
+            "section_03.apt.detail",
+            area_str=area_str, att_str=att_str, interior=interior,
+            finish_desc=finish_desc(d.finish_level),
+            ceiling=ceiling, permit_str=permit_str, rental_str=rental_str,
+        )
     )
 
 
