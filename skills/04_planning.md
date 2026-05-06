@@ -103,11 +103,11 @@
 <!-- /snippet -->
 
 <!-- snippet: section_04.permit.missing -->
-לא אותר היתר הבנייה המקורי של הבניין. יש להשלים.
+לא אותר היתר הבניה המקורי של הבנין.
 <!-- /snippet -->
 
 <!-- snippet: section_04.permit.entry -->
-היתר בנייה מספר {permit_number} מתאריך {permit_date}, אשר התיר {permit_allowed}.
+היתר בניה מספר {permit_number} מתאריך {permit_date}, אשר התיר {permit_allowed}.
 <!-- /snippet -->
 
 <!-- snippet: section_04.permit.completion -->

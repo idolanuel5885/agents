@@ -70,7 +70,7 @@
 <!-- /snippet -->
 
 <!-- snippet: section_01.title -->
-חוות דעת — שומת מקרקעין{full_suffix}
+חוות דעת - שומת מקרקעין{full_suffix}
 <!-- /snippet -->
 
 <!-- snippet: section_01.title_full_suffix -->
