@@ -112,3 +112,96 @@
 - הערות אזהרה: לפרט מה ולטובת מי
 - שמות בעלי זכויות: כמו שרשום בטאבו (שם משפחה ראשון)
 - חלקים יחסיים: 1/2, 3/4 — לא אחוזים
+
+---
+
+## Generator snippets
+
+<!-- snippet: section_05.heading -->
+המצב המשפטי
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.heading -->
+א. נסח רישום מקרקעין
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.intro -->
+על פי העתק רישום מפנקס הבתים המשותפים, אשר הופק על ידי הח"מ בתאריך {registration_date} באמצעות האינטרנט, עולים, בין היתר, הפרטים הבאים:
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.label.block -->
+גוש
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.label.parcel -->
+חלקה
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.label.sub_parcel -->
+תת חלקה
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.label.floor_description -->
+תיאור קומה
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.label.area -->
+שטח
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.label.common_share -->
+החלק ברכוש המשותף
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.label.owners -->
+בעלויות
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.label.notes -->
+הערות
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.notes_default -->
+לא נרשמו הערות
+<!-- /snippet -->
+
+<!-- snippet: section_05.registration.area_value -->
+{area:.0f} מ"ר
+<!-- /snippet -->
+
+<!-- snippet: section_05.diagram.heading -->
+ב. תשריט בית משותף
+<!-- /snippet -->
+
+<!-- snippet: section_05.diagram.para -->
+להלן תכנית קומה {floor} מתוך תשריט הבית המשותף: [הכנס תמונה]
+<!-- /snippet -->
+
+<!-- snippet: section_05.rental.heading -->
+ג. הסכם שכירות
+<!-- /snippet -->
+
+<!-- snippet: section_05.rental.intro -->
+בהתאם להסכם שכירות בלתי מוגנת אשר נחתם בתאריך {rental_agreement_date}, בין {landlord_name} לבין {tenant_name}, עולים הפרטים הבאים:
+<!-- /snippet -->
+
+<!-- snippet: section_05.rental.label.address -->
+המושכר
+<!-- /snippet -->
+
+<!-- snippet: section_05.rental.label.period -->
+תקופת השכירות
+<!-- /snippet -->
+
+<!-- snippet: section_05.rental.label.rent -->
+דמי השכירות
+<!-- /snippet -->
+
+<!-- snippet: section_05.rental.period_value -->
+{start} — {end}
+<!-- /snippet -->
+
+<!-- snippet: section_05.rental.rent_value -->
+{rent} לחודש
+<!-- /snippet -->
+

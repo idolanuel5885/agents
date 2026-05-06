@@ -438,25 +438,24 @@ def _section_04_planning(doc: Document, d: PropertyInput):
 
 def _section_05_legal(doc: Document, d: PropertyInput):
     """המצב המשפטי"""
-    add_heading(doc, "המצב המשפטי")
-    add_heading(doc, "א. נסח רישום מקרקעין", level=2)
+    add_heading(doc, skill_loader.get("section_05.heading"))
+    add_heading(doc, skill_loader.get("section_05.registration.heading"), level=2)
 
-    add_para(
-        doc,
-        f"על פי העתק רישום מפנקס הבתים המשותפים, אשר הופק על ידי הח\"מ "
-        f"בתאריך {d.registration_date} באמצעות האינטרנט, "
-        f"עולים, בין היתר, הפרטים הבאים:"
-    )
+    add_para(doc, skill_loader.render(
+        "section_05.registration.intro", registration_date=d.registration_date,
+    ))
 
     reg_rows = [
-        ("גוש", d.block),
-        ("חלקה", d.parcel),
-        ("תת חלקה", d.sub_parcel),
-        ("תיאור קומה", d.floor_description),
-        ("שטח", f"{d.registered_area:.0f} מ\"ר"),
-        ("החלק ברכוש המשותף", d.common_property_share),
-        ("בעלויות", d.rights_owner),
-        ("הערות", "לא נרשמו הערות"),
+        (skill_loader.get("section_05.registration.label.block"), d.block),
+        (skill_loader.get("section_05.registration.label.parcel"), d.parcel),
+        (skill_loader.get("section_05.registration.label.sub_parcel"), d.sub_parcel),
+        (skill_loader.get("section_05.registration.label.floor_description"), d.floor_description),
+        (skill_loader.get("section_05.registration.label.area"),
+         skill_loader.render("section_05.registration.area_value", area=d.registered_area)),
+        (skill_loader.get("section_05.registration.label.common_share"), d.common_property_share),
+        (skill_loader.get("section_05.registration.label.owners"), d.rights_owner),
+        (skill_loader.get("section_05.registration.label.notes"),
+         skill_loader.get("section_05.registration.notes_default")),
     ]
     rtbl = make_table(doc, len(reg_rows), 2, col_widths_cm=[4.5, 11.5])
     for i, (lbl, val) in enumerate(reg_rows):
@@ -464,24 +463,24 @@ def _section_05_legal(doc: Document, d: PropertyInput):
         set_cell(rtbl.rows[i].cells[1], val)
 
     add_para(doc, "")
-    add_heading(doc, "ב. תשריט בית משותף", level=2)
-    add_para(
-        doc,
-        f"להלן תכנית קומה {d.floor} מתוך תשריט הבית המשותף: [הכנס תמונה]"
-    )
+    add_heading(doc, skill_loader.get("section_05.diagram.heading"), level=2)
+    add_para(doc, skill_loader.render("section_05.diagram.para", floor=d.floor))
 
     if d.is_rented:
-        add_heading(doc, "ג. הסכם שכירות", level=2)
-        add_para(
-            doc,
-            f"בהתאם להסכם שכירות בלתי מוגנת אשר נחתם בתאריך "
-            f"{d.rental_agreement_date}, בין {d.landlord_name} לבין "
-            f"{d.tenant_name}, עולים הפרטים הבאים:"
-        )
+        add_heading(doc, skill_loader.get("section_05.rental.heading"), level=2)
+        add_para(doc, skill_loader.render(
+            "section_05.rental.intro",
+            rental_agreement_date=d.rental_agreement_date,
+            landlord_name=d.landlord_name,
+            tenant_name=d.tenant_name,
+        ))
         rent_rows = [
-            ("המושכר", d.address),
-            ("תקופת השכירות", f"{d.rental_start_date} — {d.rental_end_date}"),
-            ("דמי השכירות", f"{fmt_ils(d.monthly_rent)} לחודש"),
+            (skill_loader.get("section_05.rental.label.address"), d.address),
+            (skill_loader.get("section_05.rental.label.period"),
+             skill_loader.render("section_05.rental.period_value",
+                                 start=d.rental_start_date, end=d.rental_end_date)),
+            (skill_loader.get("section_05.rental.label.rent"),
+             skill_loader.render("section_05.rental.rent_value", rent=fmt_ils(d.monthly_rent))),
         ]
         rnttbl = make_table(doc, len(rent_rows), 2, col_widths_cm=[4.5, 11.5])
         for i, (lbl, val) in enumerate(rent_rows):
