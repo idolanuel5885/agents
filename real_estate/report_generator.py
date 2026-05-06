@@ -10,6 +10,7 @@ from .docx_utils import (
     make_rtl_doc, add_para, add_heading, add_bullet, set_cell, make_table,
     FONT_BODY, FONT_HEADING1, FONT_HEADING2, FONT_TITLE,
 )
+from . import skill_loader
 
 # ── Hebrew helpers ────────────────────────────────────────────────────────────
 
@@ -110,11 +111,11 @@ def rights_display(rt: RightsType) -> str:
 
 
 def purpose_display(p: ReportPurpose) -> str:
-    return {
-        ReportPurpose.MARKET: "אומדן שווי שוק בין קונה מרצון למוכר מרצון",
-        ReportPurpose.STANDARD_19: "אומדן שווי לצורך בטוחה למתן אשראי לפי תקן 19",
-        ReportPurpose.EVACUATION: "אומדן שווי שוק בין קונה מרצון למוכר מרצון — פינוי-בינוי (שתי חלופות)",
-    }[p]
+    return skill_loader.get({
+        ReportPurpose.MARKET: "purpose.market",
+        ReportPurpose.STANDARD_19: "purpose.standard_19",
+        ReportPurpose.EVACUATION: "purpose.evacuation",
+    }[p])
 
 
 def finish_desc(level: FinishLevel) -> str:
@@ -141,46 +142,67 @@ def finish_desc(level: FinishLevel) -> str:
 
 def _section_01_title(doc: Document, d: PropertyInput):
     """כותרת ופתיח"""
-    full_label = "" if d.report_purpose == ReportPurpose.MARKET else " — מלאה"
-    prop_type = f"דירת {d.rooms} חדרים"
+    full_suffix = (
+        "" if d.report_purpose == ReportPurpose.MARKET
+        else skill_loader.get("section_01.title_full_suffix")
+    )
+    prop_type = skill_loader.render("section_01.prop_type_apartment", rooms=d.rooms)
 
     # Header table (4 rows × 1 col)
     tbl = make_table(doc, 4, 1)
     set_cell(tbl.rows[0].cells[0],
-             f"חוות דעת — שומת מקרקעין{full_label}",
+             skill_loader.render("section_01.title", full_suffix=full_suffix),
              bold=True, font_size=FONT_TITLE)
     set_cell(tbl.rows[1].cells[0],
-             f"הנדון: {purpose_display(d.report_purpose)} — {prop_type}",
+             skill_loader.render(
+                 "section_01.subject_line",
+                 purpose=purpose_display(d.report_purpose),
+                 prop_type=prop_type,
+             ),
              bold=True, font_size=FONT_HEADING2)
     set_cell(tbl.rows[2].cells[0],
-             f"גוש {d.block}, חלקה {d.parcel}, תת חלקה {d.sub_parcel}")
+             skill_loader.render(
+                 "section_01.block_parcel",
+                 block=d.block, parcel=d.parcel, sub_parcel=d.sub_parcel,
+             ))
     set_cell(tbl.rows[3].cells[0], d.address)
 
     add_para(doc, "", space_after=12)
 
     # Opening letter
     add_para(doc, d.report_date, space_after=4)
-    add_para(doc, f"חוות דעת מספר: {d.report_number}", space_after=12)
-    add_para(doc, "לכבוד", space_after=2)
+    add_para(doc, skill_loader.render("section_01.report_number", report_number=d.report_number),
+             space_after=12)
+    add_para(doc, skill_loader.get("section_01.lekavod"), space_after=2)
 
     if d.client_gender == ClientGender.COMPANY:
-        add_para(doc, f"{d.client_name} בע\"מ", space_after=2)
-        salutation, you = "א.ג.נ", "בקשתכם"
+        add_para(doc, skill_loader.render("section_01.client.company", client_name=d.client_name),
+                 space_after=2)
+        salutation = skill_loader.get("section_01.salutation.formal")
+        you = skill_loader.get("section_01.you.plural")
     elif d.client_gender == ClientGender.BANK:
-        add_para(doc, f"בנק {d.client_name}", space_after=2)
-        salutation, you = "א.ג.נ", "בקשתכם"
+        add_para(doc, skill_loader.render("section_01.client.bank", client_name=d.client_name),
+                 space_after=2)
+        salutation = skill_loader.get("section_01.salutation.formal")
+        you = skill_loader.get("section_01.you.plural")
     elif d.client_gender == ClientGender.FEMALE:
-        add_para(doc, f"גב' {d.client_name}", space_after=2)
-        salutation, you = "ג.נ", "בקשתך"
+        add_para(doc, skill_loader.render("section_01.client.female", client_name=d.client_name),
+                 space_after=2)
+        salutation = skill_loader.get("section_01.salutation.female")
+        you = skill_loader.get("section_01.you.singular")
     else:
-        add_para(doc, f"מר {d.client_name}", space_after=2)
-        salutation, you = "א.ג.נ", "בקשתך"
+        add_para(doc, skill_loader.render("section_01.client.male", client_name=d.client_name),
+                 space_after=2)
+        salutation = skill_loader.get("section_01.salutation.formal")
+        you = skill_loader.get("section_01.you.singular")
 
     add_para(doc, salutation, space_after=12)
     add_para(
         doc,
-        f"בהתאם ל{you}, ערכנו חוות דעת ביחס לשווי הנכס שבנדון "
-        f"לצורך {purpose_display(d.report_purpose)} ולהלן חוות הדעת:",
+        skill_loader.render(
+            "section_01.opening",
+            you=you, purpose=purpose_display(d.report_purpose),
+        ),
         space_after=8,
     )
 

@@ -51,3 +51,85 @@
 - בנק: "לכבוד [שם הבנק], א.ג.נ"
 - מספר מזמינים: מפרטים את כולם שורה-שורה
 - המילה "מלאה" מופיעה בכותרת רק בדוחות תקן 19 ופינוי-בינוי
+
+---
+
+## Generator snippets
+תכני המחולל. כל בלוק מסומן במזהה ייחודי. תבניות משתמשות ב-`{var}`.
+
+<!-- snippet: purpose.market -->
+אומדן שווי שוק בין קונה מרצון למוכר מרצון
+<!-- /snippet -->
+
+<!-- snippet: purpose.standard_19 -->
+אומדן שווי לצורך בטוחה למתן אשראי לפי תקן 19
+<!-- /snippet -->
+
+<!-- snippet: purpose.evacuation -->
+אומדן שווי שוק בין קונה מרצון למוכר מרצון — פינוי-בינוי (שתי חלופות)
+<!-- /snippet -->
+
+<!-- snippet: section_01.title -->
+חוות דעת — שומת מקרקעין{full_suffix}
+<!-- /snippet -->
+
+<!-- snippet: section_01.title_full_suffix -->
+ — מלאה
+<!-- /snippet -->
+
+<!-- snippet: section_01.subject_line -->
+הנדון: {purpose} — {prop_type}
+<!-- /snippet -->
+
+<!-- snippet: section_01.prop_type_apartment -->
+דירת {rooms} חדרים
+<!-- /snippet -->
+
+<!-- snippet: section_01.block_parcel -->
+גוש {block}, חלקה {parcel}, תת חלקה {sub_parcel}
+<!-- /snippet -->
+
+<!-- snippet: section_01.report_number -->
+חוות דעת מספר: {report_number}
+<!-- /snippet -->
+
+<!-- snippet: section_01.lekavod -->
+לכבוד
+<!-- /snippet -->
+
+<!-- snippet: section_01.client.company -->
+{client_name} בע"מ
+<!-- /snippet -->
+
+<!-- snippet: section_01.client.bank -->
+בנק {client_name}
+<!-- /snippet -->
+
+<!-- snippet: section_01.client.female -->
+גב' {client_name}
+<!-- /snippet -->
+
+<!-- snippet: section_01.client.male -->
+מר {client_name}
+<!-- /snippet -->
+
+<!-- snippet: section_01.salutation.formal -->
+א.ג.נ
+<!-- /snippet -->
+
+<!-- snippet: section_01.salutation.female -->
+ג.נ
+<!-- /snippet -->
+
+<!-- snippet: section_01.opening -->
+בהתאם ל{you}, ערכנו חוות דעת ביחס לשווי הנכס שבנדון לצורך {purpose} ולהלן חוות הדעת:
+<!-- /snippet -->
+
+<!-- snippet: section_01.you.plural -->
+בקשתכם
+<!-- /snippet -->
+
+<!-- snippet: section_01.you.singular -->
+בקשתך
+<!-- /snippet -->
+

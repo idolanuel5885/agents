@@ -25,10 +25,12 @@ _SKILLS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sk
 _SKILLS_DIR = os.path.normpath(_SKILLS_DIR)
 
 _SNIPPET_RE = re.compile(
-    r"<!--\s*snippet:\s*([A-Za-z0-9_.]+)\s*-->\s*(.*?)\s*<!--\s*/snippet\s*-->",
+    r"<!--\s*snippet:\s*([A-Za-z0-9_.]+)\s*-->\n"
+    r"(.*?)"
+    r"\n<!--\s*/snippet\s*-->",
     re.DOTALL,
 )
-_CHARACTER_LINE_RE = re.compile(r"^\s*<!--\s*character:\s*[A-Za-z]+\s*-->\s*\n", re.MULTILINE)
+_CHARACTER_LINE_RE = re.compile(r"\A\s*<!--\s*character:\s*[A-Za-z]+\s*-->\s*\n?")
 
 _cache: Dict[str, str] = {}
 _loaded = False
@@ -48,7 +50,7 @@ def _load_all() -> None:
         for match in _SNIPPET_RE.finditer(text):
             snippet_id = match.group(1)
             body = match.group(2)
-            body = _CHARACTER_LINE_RE.sub("", body, count=1).strip("\n")
+            body = _CHARACTER_LINE_RE.sub("", body, count=1)
             if snippet_id in _cache:
                 raise RuntimeError(
                     f"duplicate snippet id '{snippet_id}' "
