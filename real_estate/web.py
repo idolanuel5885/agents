@@ -14,6 +14,7 @@ from .models import (
 )
 from .report_generator import generate_report_bytes
 from . import claude_descriptions
+from . import parcel_lookup
 
 import logging
 
@@ -73,6 +74,35 @@ def _i(v: Any, default=0) -> int:
 @router.get("", response_class=HTMLResponse)
 async def get_form():
     return _FORM_HTML
+
+
+# ── Parcel lookup endpoint ────────────────────────────────────────────────────
+
+
+@router.post("/lookup-parcel")
+async def lookup_parcel_endpoint(address: str = Form(...)):
+    """Best-effort parcel + planning data lookup for an address.
+
+    Returns JSON shaped like ``ParcelLookupResult.to_dict()``. The
+    handler never raises — even on failure it returns ``ok=false`` with
+    a Hebrew ``error`` so the form can show the reason and let the
+    appraiser keep filling manually.
+    """
+    try:
+        result = parcel_lookup.lookup_parcel(address)
+    except Exception as e:
+        logger.exception("parcel_lookup raised unexpectedly")
+        return {
+            "ok": False,
+            "block": "",
+            "parcel": "",
+            "land_use": "",
+            "plans": [],
+            "boundaries": {"north": "", "south": "", "east": "", "west": ""},
+            "warnings": [],
+            "error": f"שגיאה לא צפויה בבדיקת הנתונים: {e}",
+        }
+    return result.to_dict()
 
 
 # ── Generation endpoint ───────────────────────────────────────────────────────
@@ -135,6 +165,11 @@ async def generate(
     city_description: str = Form(""),
     neighborhood_name: str = Form(""),
     neighborhood_description: str = Form(""),
+    land_use: str = Form(""),
+    north_boundary: str = Form(""),
+    south_boundary: str = Form(""),
+    east_boundary: str = Form(""),
+    west_boundary: str = Form(""),
     property_images: List[UploadFile] = File([]),
     plan_docs: List[UploadFile] = File([]),
     plan_types: List[str] = Form([]),
@@ -262,10 +297,10 @@ async def generate(
         lot_area=0.0,
         topography="מישורית",
         lot_shape="רגולרית",
-        north_boundary="יש להשלים",
-        south_boundary="יש להשלים",
-        east_boundary="יש להשלים",
-        west_boundary="יש להשלים",
+        north_boundary=north_boundary.strip() or "יש להשלים",
+        south_boundary=south_boundary.strip() or "יש להשלים",
+        east_boundary=east_boundary.strip() or "יש להשלים",
+        west_boundary=west_boundary.strip() or "יש להשלים",
         planning_plans=[],
         has_original_permit=False,
         building_permit_number="",
@@ -274,7 +309,7 @@ async def generate(
         has_completion_cert=False,
         completion_cert_date="",
         balcony_closed_without_permit=False,
-        zoning_for_principles="יש להשלים",
+        zoning_for_principles=land_use.strip() or "יש להשלים",
         comparison_properties=[],
         sqm_equiv_price=_f(final_value) / (_f(built_area) or 1),
         final_value=_f(final_value),
