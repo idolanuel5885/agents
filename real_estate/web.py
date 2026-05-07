@@ -144,6 +144,16 @@ async def comparables_endpoint(req: _ComparablesRequest):
     with ``success=false`` plus a Hebrew ``message_he`` so the form can
     show the user a sentence they can act on (per CLAUDE.md A.8).
     """
+    # Unconditional entry print: prove the endpoint was reached at all.
+    # Even with DEBUG_NADLAN=0 this single line per click gives us "yes,
+    # the request hit the server" without spamming the logs.
+    print(
+        f"[NADLAN DEBUG] /shuma/comparables ENTERED "
+        f"address={req.address!r} radius={req.radius_m} "
+        f"itm=({req.itm_x},{req.itm_y})",
+        flush=True,
+    )
+
     radius = max(50, min(int(req.radius_m or 300), 5000))
 
     if req.itm_x is not None and req.itm_y is not None:
@@ -151,6 +161,11 @@ async def comparables_endpoint(req: _ComparablesRequest):
     else:
         coords = nadlan_client.address_to_itm(req.address)
         if coords is None:
+            print(
+                "[NADLAN DEBUG] /shuma/comparables → GEOCODING_FAILED "
+                "(address_to_itm returned None)",
+                flush=True,
+            )
             return {
                 "success": False,
                 "error_code": "GEOCODING_FAILED",
