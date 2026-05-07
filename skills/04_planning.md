@@ -73,3 +73,58 @@
 - תאריכים בפורמט: DD.MM.YYYY
 - אין להמציא מספרי היתר או תאריכים — רק מה שנמצא בפועל
 - אם לא נמצא מסמך — לציין "לא אותר"
+
+---
+
+## Generator snippets
+
+<!-- snippet: section_04.heading -->
+<!-- character: fixed -->
+הרקע התכנוני
+<!-- /snippet -->
+
+<!-- snippet: section_04.plans.heading -->
+<!-- character: fixed -->
+א. תוכניות מתאר
+<!-- /snippet -->
+
+<!-- snippet: common.placeholder.todo -->
+<!-- character: fixed -->
+יש להשלים
+<!-- /snippet -->
+
+<!-- snippet: section_04.plan.entry -->
+<!-- character: semi -->
+בהתאם לתוכנית מתאר מקומית מספר {plan_number}, אשר פורסמה למתן תוקף בילקוט פרסומים מספר {gazette_number} מתאריך {gazette_date}, החלקה שבנדון סווגה ביעוד "{zoning}".
+<!-- /snippet -->
+
+<!-- snippet: section_04.permit.heading -->
+<!-- character: fixed -->
+ב. רישוי
+<!-- /snippet -->
+
+<!-- snippet: section_04.permit.intro -->
+<!-- character: fixed -->
+בתיק הבניין של הנכס שבנדון אותרו, בין היתר, המסמכים הרלוונטיים הבאים:
+<!-- /snippet -->
+
+<!-- snippet: section_04.permit.missing -->
+<!-- character: fixed -->
+לא אותר היתר הבניה המקורי של הבנין.
+<!-- /snippet -->
+
+<!-- snippet: section_04.permit.entry -->
+<!-- character: semi -->
+היתר בניה מספר {permit_number} מתאריך {permit_date}, אשר התיר {permit_allowed}.
+<!-- /snippet -->
+
+<!-- snippet: section_04.permit.completion -->
+<!-- character: semi -->
+תעודת גמר מתאריך {date}.
+<!-- /snippet -->
+
+<!-- snippet: section_04.permit.balcony_closed -->
+<!-- character: fixed -->
+ככלל הדירה בנויה בהתאם להיתר אולם לא אותר היתר לסגירת המרפסת.
+<!-- /snippet -->
+
