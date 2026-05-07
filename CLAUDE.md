@@ -223,8 +223,12 @@ Entry: `real_estate/report_generator.py:_build_doc(data)`. Builds the
 report as a sequence of `_section_NN_*` calls separated by
 `add_page_break()`. Sections:
 
+- `_section_00_cover` — cover page: gray-shaded 1×1 table containing 4
+  bold+underlined centered title lines, followed by the first property
+  photo. Shows " מלאה" suffix only for Standard 19 / Evacuation reports.
 - `_section_01_title` — title block + opening letter, gendered salutation
-- `_section_02_details_table` — two-column property details table
+- `_section_02_details_table` — borderless property details rendered as
+  RTL paragraphs with two tab stops (label → ":" → value), not a Word table
 - `_section_03_description` — city/neighborhood/street, parcel
   (with boundary table), apartment description (two paragraphs:
   emphasis + detail), finish level, permit status, tenancy
@@ -295,11 +299,33 @@ loader calls.
 ### B.8 RTL helper layer
 
 `real_estate/docx_utils.py` wraps python-docx with raw XML
-(`OxmlElement`, `qn`) to enforce:
+(`OxmlElement`, `qn`) to enforce, in addition to per-paragraph RTL:
+- A4 page size (`pgSz` 11906×16838 DXA) and margins
+  (top/bottom 1440, left/right 1800, header 708, footer 1020)
+- `<w:bidi/>`, `<w:rtlGutter/>` and `<w:titlePg/>` on the section's `sectPr`
+- `<w:themeFontLang w:bidi="he-IL"/>` in `settings.xml`
+- `<w:bidiVisual/>` on every table created via `make_table` (columns flip RTL)
+- `David` as the default font (ascii / hAnsi / cs)
+- Header and footer that embed `assets/header_logo.png` and
+  `assets/footer_strip.png` (centered, ~16.5 cm wide). Missing assets
+  produce empty header/footer paragraphs — the document still validates.
+- Bullet paragraphs use a single RTL run beginning with `"• "` so the
+  bullet appears on the right
+- `add_heading` produces bold + underline at body size (no Word built-in
+  Heading style — those introduce sans-serif blue text)
+- `add_field_line(label, value)` for the label-tab-colon-tab-value
+  layout used in the property-details section
+- `set_cell_shading(cell, fill_hex)` for the cover page's gray box
+
+Public API (unchanged): `make_rtl_doc`, `add_para`, `add_heading`,
+`add_bullet`, `set_cell`, `make_table` — all existing call sites continue
+to work.
+
+The lower-level RTL contract still holds:
 - `bidi=1` at document, paragraph and cell level
 - `jc=right` for justification
 - `<w:rtl/>` on every run
-- Arial font for ASCII, hAnsi, and complex script
+- David font for ASCII, hAnsi, and complex script
 - Fixed sizes: TITLE=16, HEADING1=14, HEADING2=13, BODY=12
 
 Public functions: `make_rtl_doc`, `add_para`, `add_heading`, `add_bullet`,
@@ -391,13 +417,13 @@ These are real issues in the current codebase. Some are bugs, some are
 design tensions worth flagging. Don't fix them unless the current task
 calls for it — but be aware of them.
 
-### C.1 `payload` undefined bug in web.py
+### C.1 `payload` undefined bug in web.py — RESOLVED
 
-`real_estate/web.py:235` references `payload.address`, but no `payload`
-variable exists in the scope of `generate(...)`. The address comes in
-as the form parameter `address`. This will fail at runtime when
-generating a report from the Web. Likely a refactor leftover. Verify
-before relying on the Web path end-to-end.
+The historical `payload.address` reference no longer exists in
+`real_estate/web.py`. `generate(...)` uses the `address` form parameter
+directly when computing the download filename. Verified by grep on the
+visual-formatting pass; entry kept here for traceability and may be
+removed on the next CLAUDE.md cleanup.
 
 ### C.2 Web form covers fewer fields than CLI form
 
