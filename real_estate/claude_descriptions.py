@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -94,13 +95,20 @@ _SYSTEM_PROMPT = (
     "1-3 חיפושים לפי הצורך. אם הביצוע הראשון לא החזיר מידע ספציפי, נסה "
     "ניסוח אחר.\n\n"
     "כלל חוסר מידע:\n"
-    "אם לאחר החיפוש לא מצאת מידע ספציפי לגבי המקום שנשאלת עליו (למשל "
-    "שכונה קטנה שאינה מתועדת באינטרנט), אל תכתוב תיאור גנרי. במקום זה "
-    f"החזר אך ורק את המחרוזת '{INSUFFICIENT_INFO}' — בלי שום טקסט נוסף, "
-    "בלי הסבר, בלי פסקה. עדיף שהשמאי יקבל הודעת 'יש להשלים' מאשר תיאור "
-    "כללי שעשוי להיות שגוי.\n\n"
+    "אם לאחר החיפוש לא מצאת מידע ספציפי על המקום המבוקש דווקא — "
+    f"החזר אך ורק את המחרוזת '{INSUFFICIENT_INFO}', ללא טקסט אחר. "
+    "מקרים שבהם הכלל חל: (א) השכונה אינה מתועדת באינטרנט; "
+    "(ב) השם זהה לשכונה במקום אחר וזה כל מה שהחיפוש החזיר (למשל "
+    "'נווה גן' שהיא שכונה ברמת השרון, לא ברמת גן); (ג) המידע היחיד "
+    "שמצאת הוא על פרויקט בנייה ספציפי בעל שם דומה, ולא על שכונה "
+    "מתועדת; (ד) המידע שמצאת לא מספיק לשלושה-ארבעה משפטים ספציפיים. "
+    "אסור לכתוב 'הערה' או 'הסבר' לפני המחרוזת, אסור לכתוב פסקה "
+    "ולחתום אותה ב-INSUFFICIENT_INFO, אסור לכתוב מה מצאת או מה לא "
+    "מצאת. ההחזר היחיד הוא המחרוזת '" f"{INSUFFICIENT_INFO}'. "
+    "בכל ספק — החזר את המחרוזת. עדיף שהשמאי יקבל 'יש להשלים' מאשר "
+    "תיאור שגוי או הסבר.\n\n"
     "כללי כתיבה (כשיש מספיק מידע):\n"
-    "1. פסקה אחת בלבד, 3-4 משפטים.\n"
+    "1. פסקה אחת בלבד, מקסימום 4 משפטים.\n"
     "2. עברית רשמית בלבד, גוף שלישי. אסור בהחלט לערבב שפות אחרות (ערבית, "
     "אנגלית, תעתיקים) בתוך הפסקה. שמות לועזיים אם נדרשים — בתעתיק עברי "
     "בלבד. אסור להשתמש באותיות שאינן עברית או לטינית.\n"
@@ -116,7 +124,57 @@ _SYSTEM_PROMPT = (
     "7. אל תתחיל את הפסקה בכותרת או בשם המקום בנפרד — פסקה רציפה.\n"
     "8. החזר את הפסקה בלבד, ללא הקדמות, ללא הסברים, ללא הערות שוליים, "
     "ללא רשימת מקורות בסוף.\n"
+    "9. החזר פסקה אחת בלבד. אסור להחזיר 'טיוטה ראשונה' / 'טיוטה שנייה' "
+    "/ 'גרסה א' / 'גרסה ב', אסור להחזיר מספר גרסאות של הפסקה, אסור "
+    "להשתמש בקו מפריד '---' או בכל סימון אחר של מעבר בין גרסאות, אסור "
+    "פורמט markdown (כוכביות, כותרות, רשימות). תן אך ורק את הפסקה "
+    "הסופית כפי שתופיע בדוח השמאות, ולא יותר מ-4 משפטים סופיים.\n"
 )
+
+
+# ── Output post-processing ────────────────────────────────────────────────────
+# Defense in depth on top of the system prompt: even when the model
+# slips and returns drafts/markdown/etc., the wrapper produces a clean
+# paragraph for the report.
+
+_TRAILING_PUNCT_RE = re.compile(r"\s+([,.;:])")
+_SENTENCE_BOUNDARY_RE = re.compile(r"(?<=\.)\s+")
+
+
+def _postprocess(text: str) -> str:
+    """Clean up minor model output artefacts before returning to caller.
+
+    Three steps, in order:
+
+    1. If the response contains the ``---`` separator (the model's
+       favourite "draft / final" delimiter), keep only the block after
+       the *last* ``---``. This is the belt-and-braces guarantee that
+       complements the system-prompt rule.
+    2. Strip whitespace that appears before commas/periods/semicolons/
+       colons — an artefact of how citation markers are stripped from
+       web-search results.
+    3. Cap the paragraph at 4 sentences (period followed by whitespace
+       or end-of-string).
+
+    The ``INSUFFICIENT_INFO`` sentinel survives this pipeline unchanged
+    because step 1 keeps the trailing block (where the model places
+    the sentinel) and steps 2-3 are no-ops on a single token.
+    """
+    text = (text or "").strip()
+    if not text:
+        return text
+    # Sentinel takes precedence: if the model said "insufficient info"
+    # anywhere in its response, replace the whole thing with the bare
+    # sentinel. Some models like to add an explanation before/after it.
+    if INSUFFICIENT_INFO in text:
+        return INSUFFICIENT_INFO
+    if "---" in text:
+        text = text.rsplit("---", 1)[-1].strip()
+    text = _TRAILING_PUNCT_RE.sub(r"\1", text)
+    parts = _SENTENCE_BOUNDARY_RE.split(text)
+    if len(parts) > 4:
+        text = " ".join(parts[:4]).strip()
+    return text
 
 
 class DescriptionUnavailable(RuntimeError):
@@ -168,7 +226,7 @@ def _generate(user_prompt: str) -> str:
     text = _extract_text(message)
     if not text:
         raise DescriptionUnavailable("Claude returned an empty response")
-    return text
+    return _postprocess(text)
 
 
 def describe_city(city_name: str) -> str:
