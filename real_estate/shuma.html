@@ -584,9 +584,6 @@
     }
     .btn-cta.loading .spinner { display: inline-block; }
     .btn-cta.loading .btn-icon { display: none; }
-    .btn-secondary.loading .spinner { display: inline-block; margin-left: 6px; }
-    .btn-secondary { display: inline-flex; align-items: center; }
-    .btn-secondary:disabled { opacity: 0.6; cursor: wait; }
 
     /* ── Toast ── */
     #toast {
@@ -746,16 +743,6 @@
         <span class="err-msg">שדה חובה</span>
       </div>
 
-      <div class="f full" id="f-parcel-lookup">
-        <button type="button" id="lookup-parcel-btn" class="btn-secondary">
-          <span class="lookup-spinner spinner" style="border-color: rgba(31,42,58,0.25); border-top-color: var(--navy-800);"></span>
-          <span id="lookup-parcel-label">מלא נתוני חלקה אוטומטית</span>
-        </button>
-        <span class="hint">מאחזר גוש, חלקה, ייעוד קרקע, תוכניות וגבולות מתכנון זמין על-פי הכתובת. תת-חלקה תישאר ידנית.</span>
-        <div id="lookup-parcel-msg" class="hint" style="display:none; margin-top:6px;"></div>
-        <div id="lookup-parcel-plans" class="hint" style="display:none; margin-top:6px;"></div>
-      </div>
-
       <div class="f" id="f-block">
         <label>גוש <span class="req-star">*</span></label>
         <input type="text" id="block" name="block" placeholder="6130">
@@ -772,32 +759,6 @@
         <label>תת חלקה <span class="req-star">*</span></label>
         <input type="text" id="sub_parcel" name="sub_parcel" placeholder="8">
         <span class="err-msg">שדה חובה</span>
-      </div>
-
-      <div class="f full">
-        <label>ייעוד קרקע</label>
-        <input type="text" id="land_use" name="land_use" placeholder="למשל: מגורים ג'">
-        <span class="hint">אופציונלי — ימולא אוטומטית בלחיצה על "מלא נתוני חלקה".</span>
-      </div>
-
-      <div class="f">
-        <label>גבול מצפון</label>
-        <input type="text" id="north_boundary" name="north_boundary" placeholder="לדוגמה: רחוב הרצל / חלקה 28 בגוש 6130">
-      </div>
-
-      <div class="f">
-        <label>גבול מדרום</label>
-        <input type="text" id="south_boundary" name="south_boundary" placeholder="">
-      </div>
-
-      <div class="f">
-        <label>גבול ממזרח</label>
-        <input type="text" id="east_boundary" name="east_boundary" placeholder="">
-      </div>
-
-      <div class="f">
-        <label>גבול ממערב</label>
-        <input type="text" id="west_boundary" name="west_boundary" placeholder="">
       </div>
 
     </div>
@@ -1287,105 +1248,6 @@
   // ── Draft button (placeholder — feature not yet wired) ────────────────────
   document.getElementById('draft-btn').addEventListener('click', function () {
     alert('שמירת טיוטה תהיה זמינה בקרוב.');
-  });
-
-  // ── Parcel lookup button ──────────────────────────────────────────────────
-  document.getElementById('lookup-parcel-btn').addEventListener('click', async function () {
-    const btn   = this;
-    const label = document.getElementById('lookup-parcel-label');
-    const msg   = document.getElementById('lookup-parcel-msg');
-    const plansEl = document.getElementById('lookup-parcel-plans');
-    const addr  = document.getElementById('address').value.trim();
-
-    msg.style.display = 'none';
-    msg.textContent = '';
-    plansEl.style.display = 'none';
-    plansEl.innerHTML = '';
-
-    if (!addr) {
-      msg.style.color = 'var(--required)';
-      msg.textContent = 'יש להזין כתובת לפני שימוש בכפתור זה.';
-      msg.style.display = 'block';
-      document.getElementById('f-address').classList.add('err');
-      return;
-    }
-
-    btn.disabled = true;
-    btn.classList.add('loading');
-    label.textContent = 'מאחזר נתונים...';
-
-    try {
-      const fd = new FormData();
-      fd.append('address', addr);
-      const resp = await fetch('/shuma/lookup-parcel', { method: 'POST', body: fd });
-      const data = await resp.json();
-
-      if (!data.ok && data.error) {
-        msg.style.color = 'var(--required)';
-        msg.textContent = 'שגיאה: ' + data.error + ' — ניתן להמשיך ולמלא ידנית.';
-        msg.style.display = 'block';
-        return;
-      }
-
-      // Fill the fields, but only when they are empty so we don't overwrite
-      // values the appraiser has already entered.
-      const fillIfEmpty = (id, value) => {
-        if (!value) return false;
-        const el = document.getElementById(id);
-        if (!el) return false;
-        if (el.value && el.value.trim()) return false;
-        el.value = value;
-        el.closest('.f')?.classList.remove('err');
-        return true;
-      };
-
-      const filled = [];
-      if (fillIfEmpty('block',  data.block))    filled.push('גוש');
-      if (fillIfEmpty('parcel', data.parcel))   filled.push('חלקה');
-      if (fillIfEmpty('land_use', data.land_use)) filled.push('ייעוד');
-      if (data.boundaries) {
-        const b = data.boundaries;
-        if (fillIfEmpty('north_boundary', b.north)) filled.push('גבול צפון');
-        if (fillIfEmpty('south_boundary', b.south)) filled.push('גבול דרום');
-        if (fillIfEmpty('east_boundary',  b.east))  filled.push('גבול מזרח');
-        if (fillIfEmpty('west_boundary',  b.west))  filled.push('גבול מערב');
-      }
-
-      // Plans — the form has no list field for these yet, so display
-      // them in an info box for the appraiser to enter manually.
-      if (Array.isArray(data.plans) && data.plans.length) {
-        const lines = data.plans.map(p => {
-          const parts = [];
-          if (p.number) parts.push('תוכנית ' + p.number);
-          if (p.designation) parts.push(p.designation);
-          if (p.year) parts.push(p.year);
-          return '• ' + parts.join(' — ');
-        });
-        plansEl.innerHTML = '<strong>תוכניות מתאר חלות (להעתיק ידנית):</strong><br>' + lines.join('<br>');
-        plansEl.style.color = 'var(--navy-800)';
-        plansEl.style.display = 'block';
-      }
-
-      const summary = filled.length
-        ? 'מולאו: ' + filled.join(', ') + '. יש לוודא שהנתונים תקינים לפני הפקת הדוח.'
-        : 'לא היו שדות ריקים למילוי אוטומטי.';
-      let extra = '';
-      if (Array.isArray(data.warnings) && data.warnings.length) {
-        extra = ' ' + data.warnings.join(' ');
-      }
-      msg.style.color = 'var(--navy-800)';
-      msg.textContent = summary + extra;
-      msg.style.display = 'block';
-
-    } catch (err) {
-      msg.style.color = 'var(--required)';
-      msg.textContent = 'שגיאת רשת בבדיקת נתוני החלקה: ' + err.message + ' — ניתן להמשיך ולמלא ידנית.';
-      msg.style.display = 'block';
-    } finally {
-      btn.disabled = false;
-      btn.classList.remove('loading');
-      label.textContent = 'מלא נתוני חלקה אוטומטית';
-    }
   });
 </script>
 </body>
