@@ -4,30 +4,71 @@ Two public functions, ``describe_city`` and ``describe_neighborhood``, return
 a single short Hebrew paragraph each. They are called from the Web form
 handler when the appraiser leaves the description fields empty.
 
+This is the v2 implementation. Differences from v1:
+
+* Model upgraded from Claude Haiku 4.5 to Claude Sonnet 4.6 — Haiku produced
+  Hebrew with grammatical errors and occasional language mixing (Arabic
+  fragments) that is unacceptable in a signed appraisal report.
+* The Anthropic server-side ``web_search`` tool is enabled so Claude can
+  ground its description in real information about the specific
+  city/neighborhood before writing. Without search the model falls back
+  to generic, undifferentiated descriptions.
+* When search returns no specific information about the requested place
+  the model is instructed to return the sentinel string
+  ``INSUFFICIENT_INFO``. The wrapper translates that into ``None`` so
+  the Web handler keeps its existing "יש להשלים" placeholder, per A.7
+  ("a placeholder is better than a wrong description").
+
 Hard rules enforced via the system prompt (see CLAUDE.md A.3 and
 ``skills/03_description.md`` "תיאור עיר — כללים מעודכנים"):
 
-* Qualitative description only. No quantitative claims of any kind
-  (population, percentages, prices, growth rates, demographics).
-* Formal Hebrew, third person, neutral tone — no laudatory adjectives.
+* Hebrew only. No Arabic, no transliterations, no English glosses.
+* Formal Hebrew, third person, neutral tone.
 * One paragraph, 3-4 sentences.
+* Quantitative claims are allowed only if cited inline from an
+  authoritative source surfaced by the search (CBS / municipal site /
+  official statistics).
 
-The model used is Claude Haiku 4.5 — the task is small and per-call
-latency matters more than capability. Failures (network, missing key,
-quota) are signalled by raising ``DescriptionUnavailable``; the Web
-handler catches that and falls back to the existing "יש להשלים"
-placeholder so report generation never blocks on the API.
+Failures (network, missing key, quota) are signalled by raising
+``DescriptionUnavailable``; the Web handler catches that and falls back
+to the existing "יש להשלים" placeholder so report generation never
+blocks on the API.
 """
 from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "claude-haiku-4-5-20251001"
-_MAX_TOKENS = 400
+# Latest Sonnet at time of writing (verified against
+# https://platform.claude.com/docs/en/about-claude/models/overview).
+_MODEL = "claude-sonnet-4-6"
+
+# Built-in Anthropic server-side web search tool. Documented at
+# https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
+# Using the basic version (no code-execution dependency); 5 searches is
+# more than enough for one city + one neighborhood.
+#
+# Note on user_location: the API rejects ``country: "IL"`` ("Country code
+# IL is not supported"), so we omit user_location entirely. The Hebrew
+# system prompt and the literal "בישראל" / city name in the user prompt
+# already steer searches to Israeli sources.
+_WEB_SEARCH_TOOL = {
+    "type": "web_search_20250305",
+    "name": "web_search",
+    "max_uses": 5,
+}
+
+# Generous output budget — the agentic loop needs room for tool calls and
+# results before the final paragraph; the paragraph itself is short.
+_MAX_TOKENS = 2048
+
+# Sentinel returned by the model when web search did not surface
+# specific information about the requested place.
+INSUFFICIENT_INFO = "INSUFFICIENT_INFO"
 
 # Per CLAUDE.md A.7: auto-filled sections must be presented to the appraiser
 # with their source visible. The Web handler appends this sentence to any
@@ -42,24 +83,98 @@ def with_footnote(text: str) -> str:
         return text
     return f"{text} ({SOURCE_FOOTNOTE})"
 
+
 _SYSTEM_PROMPT = (
     "אתה עוזר לשמאי מקרקעין בישראל בכתיבת תיאור איכותני קצר של מיקום עבור "
-    "דוח שמאות בעברית רשמית.\n\n"
-    "כללים מחייבים (מתוך 03_description.md, סעיף 'תיאור עיר — כללים מעודכנים'):\n"
-    "1. כתוב פסקה אחת בלבד, 3-4 משפטים.\n"
-    "2. עברית רשמית בגוף שלישי. ללא שימוש בגוף ראשון, ללא לשון מדוברת.\n"
-    "3. תיאור איכותני בלבד: מיקום גיאוגרפי, אופי כללי, אופי הבנייה הדומיננטי, "
-    "ונגישות תחבורתית.\n"
-    "4. אסור בהחלט לכלול נתונים כמותיים מכל סוג: מספר תושבים, אחוזים, "
-    "מחירים ממוצעים, נתונים דמוגרפיים, קצב גידול, מרחקים במספרים, שנים מספריות "
-    "כקביעה עובדתית, או כל מספר שאינו מצוטט ממקור סמכותי. הכלי הזה אינו מבצע "
-    "חיפוש ברשת ולכן אין לך מקור סמכותי לצטט. אם אתה לא בטוח אם משהו הוא נתון "
-    "כמותי, השמט אותו.\n"
-    "5. הימנע מלשון משבחת או שיווקית (\"מרשים\", \"יפהפה\", \"מבוקש\", "
-    "\"איכותי\"). שפת השמאות נייטרלית ועובדתית.\n"
-    "6. אל תתחיל את הפסקה בכותרת או בשם המקום בנפרד — כתוב פסקה רציפה.\n"
-    "7. החזר את הפסקה בלבד, ללא הקדמות, ללא הסברים, ללא הערות שוליים."
+    "דוח שמאות בעברית רשמית. בדוח רשמי בעברית; כל סטייה בלשון פוסלת את "
+    "הפסקה.\n\n"
+    "שלב חיפוש (חובה לפני הכתיבה):\n"
+    "השתמש בכלי web_search כדי לאסוף מידע ספציפי על המקום המבוקש: מיקומו "
+    "המדויק, גבולות, אופי הבנייה הדומיננטי, תקופת בנייה כללית, אופי "
+    "השכונות הסמוכות (אם רלוונטי), ושירותים ותשתיות אופייניים. בצע "
+    "1-3 חיפושים לפי הצורך. אם הביצוע הראשון לא החזיר מידע ספציפי, נסה "
+    "ניסוח אחר.\n\n"
+    "כלל חוסר מידע:\n"
+    "אם לאחר החיפוש לא מצאת מידע ספציפי על המקום המבוקש דווקא — "
+    f"החזר אך ורק את המחרוזת '{INSUFFICIENT_INFO}', ללא טקסט אחר. "
+    "מקרים שבהם הכלל חל: (א) השכונה אינה מתועדת באינטרנט; "
+    "(ב) השם זהה לשכונה במקום אחר וזה כל מה שהחיפוש החזיר (למשל "
+    "'נווה גן' שהיא שכונה ברמת השרון, לא ברמת גן); (ג) המידע היחיד "
+    "שמצאת הוא על פרויקט בנייה ספציפי בעל שם דומה, ולא על שכונה "
+    "מתועדת; (ד) המידע שמצאת לא מספיק לשלושה-ארבעה משפטים ספציפיים. "
+    "אסור לכתוב 'הערה' או 'הסבר' לפני המחרוזת, אסור לכתוב פסקה "
+    "ולחתום אותה ב-INSUFFICIENT_INFO, אסור לכתוב מה מצאת או מה לא "
+    "מצאת. ההחזר היחיד הוא המחרוזת '" f"{INSUFFICIENT_INFO}'. "
+    "בכל ספק — החזר את המחרוזת. עדיף שהשמאי יקבל 'יש להשלים' מאשר "
+    "תיאור שגוי או הסבר.\n\n"
+    "כללי כתיבה (כשיש מספיק מידע):\n"
+    "1. פסקה אחת בלבד, מקסימום 4 משפטים.\n"
+    "2. עברית רשמית בלבד, גוף שלישי. אסור בהחלט לערבב שפות אחרות (ערבית, "
+    "אנגלית, תעתיקים) בתוך הפסקה. שמות לועזיים אם נדרשים — בתעתיק עברי "
+    "בלבד. אסור להשתמש באותיות שאינן עברית או לטינית.\n"
+    "3. אסור לשון מדוברת, אסור גוף ראשון.\n"
+    "4. תיאור איכותני: מיקום בעיר/אזור, אופי הבנייה הדומיננטי "
+    "(ותיקה/חדשה/מעורבת/לשימור), אופי כללי, ונגישות תחבורתית.\n"
+    "5. נתונים כמותיים (אחוזים, מספרי תושבים, מחירים, שנים מספריות "
+    "כקביעה) מותרים אך ורק כאשר מצאת אותם בחיפוש ואתה מצטט מקור סמכותי "
+    "בגוף הפסקה (למשל 'על פי נתוני הלמ\"ס' או 'על פי אתר העירייה'). "
+    "אם אין מקור — השמט את המספר או החלף בתיאור איכותני.\n"
+    "6. הימנע מלשון משבחת או שיווקית ('מרשים', 'יפהפה', 'מבוקש', "
+    "'איכותי'). שפת השמאות נייטרלית ועובדתית.\n"
+    "7. אל תתחיל את הפסקה בכותרת או בשם המקום בנפרד — פסקה רציפה.\n"
+    "8. החזר את הפסקה בלבד, ללא הקדמות, ללא הסברים, ללא הערות שוליים, "
+    "ללא רשימת מקורות בסוף.\n"
+    "9. החזר פסקה אחת בלבד. אסור להחזיר 'טיוטה ראשונה' / 'טיוטה שנייה' "
+    "/ 'גרסה א' / 'גרסה ב', אסור להחזיר מספר גרסאות של הפסקה, אסור "
+    "להשתמש בקו מפריד '---' או בכל סימון אחר של מעבר בין גרסאות, אסור "
+    "פורמט markdown (כוכביות, כותרות, רשימות). תן אך ורק את הפסקה "
+    "הסופית כפי שתופיע בדוח השמאות, ולא יותר מ-4 משפטים סופיים.\n"
 )
+
+
+# ── Output post-processing ────────────────────────────────────────────────────
+# Defense in depth on top of the system prompt: even when the model
+# slips and returns drafts/markdown/etc., the wrapper produces a clean
+# paragraph for the report.
+
+_TRAILING_PUNCT_RE = re.compile(r"\s+([,.;:])")
+_SENTENCE_BOUNDARY_RE = re.compile(r"(?<=\.)\s+")
+
+
+def _postprocess(text: str) -> str:
+    """Clean up minor model output artefacts before returning to caller.
+
+    Three steps, in order:
+
+    1. If the response contains the ``---`` separator (the model's
+       favourite "draft / final" delimiter), keep only the block after
+       the *last* ``---``. This is the belt-and-braces guarantee that
+       complements the system-prompt rule.
+    2. Strip whitespace that appears before commas/periods/semicolons/
+       colons — an artefact of how citation markers are stripped from
+       web-search results.
+    3. Cap the paragraph at 4 sentences (period followed by whitespace
+       or end-of-string).
+
+    The ``INSUFFICIENT_INFO`` sentinel survives this pipeline unchanged
+    because step 1 keeps the trailing block (where the model places
+    the sentinel) and steps 2-3 are no-ops on a single token.
+    """
+    text = (text or "").strip()
+    if not text:
+        return text
+    # Sentinel takes precedence: if the model said "insufficient info"
+    # anywhere in its response, replace the whole thing with the bare
+    # sentinel. Some models like to add an explanation before/after it.
+    if INSUFFICIENT_INFO in text:
+        return INSUFFICIENT_INFO
+    if "---" in text:
+        text = text.rsplit("---", 1)[-1].strip()
+    text = _TRAILING_PUNCT_RE.sub(r"\1", text)
+    parts = _SENTENCE_BOUNDARY_RE.split(text)
+    if len(parts) > 4:
+        text = " ".join(parts[:4]).strip()
+    return text
 
 
 class DescriptionUnavailable(RuntimeError):
@@ -76,6 +191,23 @@ def _client():
     return anthropic.Anthropic()
 
 
+def _extract_text(message) -> str:
+    """Concatenate the final text content blocks from a Messages response.
+
+    With the server-side web_search tool the response can contain
+    interleaved ``text``, ``server_tool_use`` and
+    ``web_search_tool_result`` blocks. We want the model's natural-language
+    output only, joined with single spaces.
+    """
+    parts = []
+    for block in message.content:
+        if getattr(block, "type", None) == "text":
+            t = (block.text or "").strip()
+            if t:
+                parts.append(t)
+    return " ".join(parts).strip()
+
+
 def _generate(user_prompt: str) -> str:
     try:
         client = _client()
@@ -83,6 +215,7 @@ def _generate(user_prompt: str) -> str:
             model=_MODEL,
             max_tokens=_MAX_TOKENS,
             system=_SYSTEM_PROMPT,
+            tools=[_WEB_SEARCH_TOOL],
             messages=[{"role": "user", "content": user_prompt}],
         )
     except DescriptionUnavailable:
@@ -90,57 +223,87 @@ def _generate(user_prompt: str) -> str:
     except Exception as e:
         raise DescriptionUnavailable(f"Claude API call failed: {e}") from e
 
-    parts = [b.text for b in message.content if getattr(b, "type", None) == "text"]
-    text = "".join(parts).strip()
+    text = _extract_text(message)
     if not text:
         raise DescriptionUnavailable("Claude returned an empty response")
-    return text
+    return _postprocess(text)
 
 
 def describe_city(city_name: str) -> str:
-    """Return a single Hebrew paragraph describing the given city qualitatively."""
+    """Return a single Hebrew paragraph describing the given city qualitatively.
+
+    Returns the special string ``INSUFFICIENT_INFO`` when web search did
+    not surface specific information about the city. Use
+    :func:`try_describe_city` to map that case to ``None``.
+    """
     name = (city_name or "").strip()
     if not name:
         raise DescriptionUnavailable("city_name is empty")
     prompt = (
-        f"כתוב פסקה אחת בעברית רשמית המתארת את העיר {name} מבחינה איכותנית: "
-        f"מיקום גיאוגרפי, אופי כללי, אופי הבנייה הדומיננטי, ונגישות תחבורתית. "
-        f"הקפד על איסור הנתונים הכמותיים שצוין בהוראות המערכת."
+        f"חפש ברשת מידע על העיר {name} בישראל וכתוב פסקה אחת המתארת אותה "
+        f"לפי הכללים שבהוראות המערכת. אם לא מצאת מידע ספציפי על העיר, "
+        f"החזר {INSUFFICIENT_INFO}."
     )
     return _generate(prompt)
 
 
 def describe_neighborhood(city_name: str, neighborhood_name: str) -> str:
-    """Return a single Hebrew paragraph describing the given neighborhood."""
+    """Return a single Hebrew paragraph describing the given neighborhood.
+
+    Returns the special string ``INSUFFICIENT_INFO`` when web search did
+    not surface specific information about the neighborhood. Use
+    :func:`try_describe_neighborhood` to map that case to ``None``.
+    """
     city = (city_name or "").strip()
     nbhd = (neighborhood_name or "").strip()
     if not nbhd:
         raise DescriptionUnavailable("neighborhood_name is empty")
     prompt = (
-        f"כתוב פסקה אחת בעברית רשמית המתארת את שכונת {nbhd} שבעיר {city} "
-        f"מבחינה איכותנית: מיקום השכונה בעיר, אופי הבנייה הדומיננטי "
-        f"(ותיקה/חדשה/מעורבת), ומה אופייה הכללי. הקפד על איסור הנתונים "
-        f"הכמותיים שצוין בהוראות המערכת."
+        f"חפש ברשת מידע על שכונת {nbhd} שבעיר {city} וכתוב פסקה אחת "
+        f"המתארת אותה לפי הכללים שבהוראות המערכת. הקפד שהפסקה מתייחסת "
+        f"באופן ספציפי לשכונה זו ולא כתיאור גנרי שמתאים לכל שכונה. "
+        f"אם החיפוש לא החזיר מידע ספציפי על שכונה זו דווקא, "
+        f"החזר {INSUFFICIENT_INFO}."
     )
     return _generate(prompt)
 
 
+def _is_insufficient(text: str) -> bool:
+    """True if the model returned the INSUFFICIENT_INFO sentinel."""
+    return INSUFFICIENT_INFO in (text or "")
+
+
 def try_describe_city(city_name: str) -> Optional[str]:
-    """Like ``describe_city`` but returns ``None`` on failure (logged)."""
+    """Like ``describe_city`` but returns ``None`` on failure or when the
+    model signalled INSUFFICIENT_INFO. Failures are logged.
+    """
     try:
-        return describe_city(city_name)
+        result = describe_city(city_name)
     except DescriptionUnavailable as e:
         logger.warning("describe_city(%r) failed: %s", city_name, e)
         return None
+    if _is_insufficient(result):
+        logger.info("describe_city(%r): model returned INSUFFICIENT_INFO", city_name)
+        return None
+    return result
 
 
 def try_describe_neighborhood(city_name: str, neighborhood_name: str) -> Optional[str]:
-    """Like ``describe_neighborhood`` but returns ``None`` on failure (logged)."""
+    """Like ``describe_neighborhood`` but returns ``None`` on failure or
+    when the model signalled INSUFFICIENT_INFO. Failures are logged.
+    """
     try:
-        return describe_neighborhood(city_name, neighborhood_name)
+        result = describe_neighborhood(city_name, neighborhood_name)
     except DescriptionUnavailable as e:
         logger.warning(
             "describe_neighborhood(%r, %r) failed: %s",
             city_name, neighborhood_name, e,
         )
         return None
+    if _is_insufficient(result):
+        logger.info(
+            "describe_neighborhood(%r, %r): model returned INSUFFICIENT_INFO",
+            city_name, neighborhood_name,
+        )
+        return None
+    return result
