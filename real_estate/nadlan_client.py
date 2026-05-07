@@ -26,7 +26,9 @@ between duplicated mappings already burned us once).
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
 from typing import Optional
 
@@ -34,6 +36,14 @@ from .models import ComparisonProperty
 from .parcel_lookup import geocode, to_itm
 
 logger = logging.getLogger(__name__)
+
+# Temporary diagnostic toggle. Set DEBUG_NADLAN=1 in Railway to dump the
+# raw request/response of every fetch_recent_deals call to stdout so we
+# can see what nadlan.gov.il actually returned (the /shuma/comparables
+# endpoint always returns HTTP 200 to the form, which hides the truth).
+# Uses print(flush=True) instead of the logger because uvicorn on
+# Railway sometimes swallows logger.info but always forwards prints.
+DEBUG_NADLAN = os.environ.get("DEBUG_NADLAN") == "1"
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -160,6 +170,11 @@ def fetch_recent_deals(
 
     _rate_limit()
 
+    if DEBUG_NADLAN:
+        print(f"[NADLAN DEBUG] Request URL: {_NADLAN_URL}", flush=True)
+        print(f"[NADLAN DEBUG] Request payload: {json.dumps(payload, ensure_ascii=False)}", flush=True)
+        print(f"[NADLAN DEBUG] Request headers: {dict(headers)}", flush=True)
+
     try:
         resp = requests.post(
             _NADLAN_URL,
@@ -169,10 +184,19 @@ def fetch_recent_deals(
         )
     except Exception as e:
         # Connection error, DNS, TLS, timeout — anything below HTTP.
+        if DEBUG_NADLAN:
+            print(f"[NADLAN DEBUG] Request raised before response: {type(e).__name__}: {e}", flush=True)
         raise NadlanFetchError(
             "שירות נדל\"ן.gov.il לא זמין כרגע. אנא הזן עסקאות ידנית "
             "או נסה שוב בעוד דקה."
         ) from e
+
+    if DEBUG_NADLAN:
+        print(f"[NADLAN DEBUG] Response status: {resp.status_code}", flush=True)
+        print(f"[NADLAN DEBUG] Response headers: {dict(resp.headers)}", flush=True)
+        print(f"[NADLAN DEBUG] Response final URL: {resp.url}", flush=True)
+        print(f"[NADLAN DEBUG] Response Content-Type: {resp.headers.get('content-type')}", flush=True)
+        print(f"[NADLAN DEBUG] Response body (first 800 chars): {resp.text[:800]}", flush=True)
 
     if resp.status_code in (429, 503):
         raise NadlanFetchError(
