@@ -136,34 +136,12 @@ def finish_desc(level: FinishLevel) -> str:
 # ── Section builders ──────────────────────────────────────────────────────────
 
 def _section_01_title(doc: Document, d: PropertyInput):
-    """כותרת ופתיח"""
-    full_suffix = (
-        "" if d.report_purpose == ReportPurpose.MARKET
-        else skill_loader.get("section_01.title_full_suffix")
-    )
-    prop_type = skill_loader.render("section_01.prop_type_apartment", rooms=_fmt_rooms(d.rooms))
+    """גוף המכתב — תאריך, מספר, "לכבוד", פתיח.
 
-    # Header table (4 rows × 1 col)
-    tbl = make_table(doc, 4, 1)
-    set_cell(tbl.rows[0].cells[0],
-             skill_loader.render("section_01.title", full_suffix=full_suffix),
-             bold=True, font_size=FONT_TITLE)
-    set_cell(tbl.rows[1].cells[0],
-             skill_loader.render(
-                 "section_01.subject_line",
-                 purpose=purpose_display(d.report_purpose),
-                 prop_type=prop_type,
-             ),
-             bold=True, font_size=FONT_HEADING2)
-    set_cell(tbl.rows[2].cells[0],
-             skill_loader.render(
-                 "section_01.block_parcel",
-                 block=d.block, parcel=d.parcel, sub_parcel=d.sub_parcel,
-             ))
-    set_cell(tbl.rows[3].cells[0], d.address)
-
-    add_para(doc, "", space_after=12)
-
+    הכותרת המאורגנת ("חוות דעת — שומת מקרקעין", הנדון, גוש/חלקה, כתובת)
+    כבר מוצגת בעמוד השער ב-`_section_00_cover`. הסעיף הזה מתחיל ישירות
+    בחלק המכתב ולא מציג שוב את התיבה האפורה.
+    """
     # Opening letter
     add_para(doc, d.report_date, space_after=4)
     add_para(doc, skill_loader.render("section_01.report_number", report_number=d.report_number),
@@ -746,11 +724,12 @@ def _section_00_cover(doc: Document, d: PropertyInput):
     אם אין, העמוד נשאר עם הכותרת בלבד.
     """
     suffix = " מלאה" if d.report_purpose != ReportPurpose.MARKET else ""
-    prop_type = skill_loader.render("section_01.prop_type_apartment",
-                                    rooms=_fmt_rooms(d.rooms))
+    # שורת ה"הנדון" מקוצרת בכוונה ל-"דירת מגורים" כדי שתישאר בשורה אחת
+    # בתוך התיבה האפורה. פרטי החדרים והמטרה המלאה מופיעים ממילא בעמוד הבא
+    # (טבלת פרטי הנכס) ובגוף המכתב.
     title_lines = [
         (f"חוות דעת - שומת מקרקעין{suffix}", FONT_TITLE),
-        (f"הנדון: אומדן שווי {prop_type}", FONT_HEADING1),
+        ("הנדון: אומדן שווי דירת מגורים", FONT_HEADING1),
         (f"תת חלקה {d.sub_parcel}, חלקה {d.parcel} בגוש {d.block}", FONT_HEADING1),
         (d.address, FONT_HEADING1),
     ]
