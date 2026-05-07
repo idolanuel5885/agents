@@ -192,6 +192,53 @@ def _run_probes() -> None:
 
     print()
     print("=" * 60)
+    print("Test 5: Try street-level deals JSON")
+    print("=" * 60)
+
+    test_urls_5 = [
+        "https://data.nadlan.gov.il/api/pages/street/buy/50001103.json",
+        "https://data.nadlan.gov.il/api/pages/streets/buy/50001103.json",
+        "https://data.nadlan.gov.il/api/pages/street/50001103.json",
+        "https://data.nadlan.gov.il/api/pages/buy/street/50001103.json",
+    ]
+
+    for url in test_urls_5:
+        try:
+            r = requests.get(url, timeout=10)
+            print(f"\n{url}")
+            print(f"  Status: {r.status_code}, size: {len(r.content)} bytes")
+            if r.status_code == 200:
+                print(f"  First 300 chars: {r.text[:300]}")
+        except Exception as e:
+            print(f"  FAILED: {type(e).__name__}: {e}")
+
+    print()
+    print("=" * 60)
+    print("Test 6: Try polygon-level / address-level deals JSON")
+    print("=" * 60)
+
+    test_urls_6 = [
+        "https://data.nadlan.gov.il/api/pages/polygon/buy/53292326.json",
+        "https://data.nadlan.gov.il/api/pages/address/buy/64834989.json",
+        "https://data.nadlan.gov.il/api/pages/addr/buy/64834989.json",
+        "https://data.nadlan.gov.il/api/pages/buy/64834989.json",
+        "https://data.nadlan.gov.il/api/pages/deals/64834989.json",
+        "https://data.nadlan.gov.il/api/pages/deals/65209994.json",
+        "https://data.nadlan.gov.il/api/pages/transactions/buy/65209994.json",
+    ]
+
+    for url in test_urls_6:
+        try:
+            r = requests.get(url, timeout=10)
+            print(f"\n{url}")
+            print(f"  Status: {r.status_code}, size: {len(r.content)} bytes")
+            if r.status_code == 200:
+                print(f"  First 300 chars: {r.text[:300]}")
+        except Exception as e:
+            print(f"  FAILED: {type(e).__name__}: {e}")
+
+    print()
+    print("=" * 60)
     print("PoC complete.")
     print("=" * 60)
 
