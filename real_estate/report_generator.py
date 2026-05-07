@@ -590,39 +590,91 @@ def _section_06_valuation(doc: Document, d: PropertyInput):
     add_heading(doc, skill_loader.get("section_06.comparison.heading"), level=2)
 
     if d.comparison_properties:
-        headers = [skill_loader.get(h) for h in [
+        comps = d.comparison_properties
+
+        # Hide the balcony / equiv-area columns when fewer than half of
+        # the included transactions actually have a balcony figure (per
+        # CLAUDE.md A.3 we never invent an equivalent-area number from
+        # a missing balcony — better to drop the columns entirely than
+        # render "—" stripes that could mislead the reader).
+        with_balcony = sum(
+            1 for p in comps
+            if p.balcony_area is not None and p.balcony_area > 0
+        )
+        show_balcony_cols = with_balcony >= max(1, (len(comps) + 1) // 2)
+
+        any_outlier = any(getattr(p, "is_outlier", False) for p in comps)
+
+        header_ids = [
             "section_06.comparison.header.no",
             "section_06.comparison.header.address",
             "section_06.comparison.header.floor",
             "section_06.comparison.header.rooms",
             "section_06.comparison.header.built_area",
-            "section_06.comparison.header.balcony_area",
-            "section_06.comparison.header.equiv_area",
+        ]
+        if show_balcony_cols:
+            header_ids.append("section_06.comparison.header.balcony_area")
+            header_ids.append("section_06.comparison.header.equiv_area")
+        header_ids += [
             "section_06.comparison.header.price",
             "section_06.comparison.header.price_per_sqm",
             "section_06.comparison.header.notes",
-        ]]
-        ctbl = make_table(doc, len(d.comparison_properties) + 1, len(headers))
+        ]
+        headers = [skill_loader.get(h) for h in header_ids]
+
+        ctbl = make_table(doc, len(comps) + 1, len(headers))
         for i, h in enumerate(headers):
             set_cell(ctbl.rows[0].cells[i], h, bold=True, font_size=10)
 
         empty = skill_loader.get("section_06.comparison.cell.empty")
-        for j, prop in enumerate(d.comparison_properties):
+        for j, prop in enumerate(comps):
+            row_no = f"(*) {j + 1}" if getattr(prop, "is_outlier", False) else str(j + 1)
             vals = [
-                str(j + 1),
+                row_no,
                 prop.address,
                 prop.floor,
                 prop.rooms,
                 f"{prop.built_area:.0f}",
-                f"{prop.balcony_area:.0f}" if prop.balcony_area else empty,
-                f"{prop.equiv_area:.1f}",
+            ]
+            if show_balcony_cols:
+                if prop.balcony_area:
+                    vals.append(f"{prop.balcony_area:.0f}")
+                    vals.append(f"{prop.equiv_area:.1f}")
+                else:
+                    vals.append(empty)
+                    vals.append(empty)
+            vals += [
                 fmt_ils(prop.price),
-                skill_loader.render("section_06.comparison.cell.price_per_sqm",
-                                    price=prop.price_per_sqm),
+                skill_loader.render(
+                    "section_06.comparison.cell.price_per_sqm",
+                    price=prop.price_per_sqm,
+                ),
                 prop.notes or empty,
             ]
             for i, v in enumerate(vals):
                 set_cell(ctbl.rows[j + 1].cells[i], v, font_size=10)
+
+        # Footnotes below the table — outlier note (only when any row was
+        # marked), then balcony coefficient note (only when at least one
+        # row had a balcony measurement to weight), then data-source
+        # provenance with the fetch date (only when comparables came from
+        # nadlan.gov.il via the form button — the field is None for
+        # manual entry, in which case we emit no fake provenance line).
+        if any_outlier:
+            add_para(doc, skill_loader.get("section_06.comparison.footnote.outlier"),
+                     font_size=10)
+        if show_balcony_cols and with_balcony > 0:
+            add_para(doc, skill_loader.get("section_06.comparison.footnote.balcony_coef"),
+                     font_size=10)
+        if d.comparables_fetched_at:
+            add_para(
+                doc,
+                skill_loader.render(
+                    "section_06.comparison.footnote.source",
+                    date=d.comparables_fetched_at,
+                ),
+                font_size=10,
+            )
 
         add_para(doc, "")
         add_para(doc, skill_loader.render(

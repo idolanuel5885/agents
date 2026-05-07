@@ -358,6 +358,21 @@ bullet קבוע:
 {price:,.0f} ₪
 <!-- /snippet -->
 
+<!-- snippet: section_06.comparison.footnote.outlier -->
+<!-- character: fixed -->
+(*) עסקאות אלה הינן חריגות ביחס למקובל בסביבה ולפיכך ניתן להן משקל נמוך בלבד.
+<!-- /snippet -->
+
+<!-- snippet: section_06.comparison.footnote.balcony_coef -->
+<!-- character: fixed -->
+הובא בחשבון מקדם אקוי' 0.5 לשטח המרפסת.
+<!-- /snippet -->
+
+<!-- snippet: section_06.comparison.footnote.source -->
+<!-- character: semi -->
+הנתונים הינם כפי שמפורסם בנדל"ן.gov.il, נמשך {date}.
+<!-- /snippet -->
+
 <!-- snippet: section_06.valuation.heading -->
 <!-- character: fixed -->
 ג. שומה

@@ -2,19 +2,21 @@
 import re
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, Response
+from pydantic import BaseModel
 from typing import List
 
 from .models import (
     PropertyInput, ReportPurpose, RightsType, FinishLevel,
-    PermitStatus, ClientGender,
+    PermitStatus, ClientGender, ComparisonProperty,
 )
 from .report_generator import generate_report_bytes
 from . import claude_descriptions
 from . import parcel_lookup
+from . import nadlan_client
 
 import logging
 
@@ -105,7 +107,151 @@ async def lookup_parcel_endpoint(address: str = Form(...)):
     return result.to_dict()
 
 
+# ── Comparable transactions endpoint ──────────────────────────────────────────
+
+
+class _ComparablesRequest(BaseModel):
+    """Body for ``POST /shuma/comparables``.
+
+    Either ``address`` (geocoded server-side) or ``itm_x``+``itm_y`` are
+    required. ``itm_x``/``itm_y`` win if both are provided so the
+    appraiser can override a wrong geocoding result by entering ITM
+    coordinates manually.
+    """
+    address: str = ""
+    radius_m: int = 300
+    itm_x: Optional[float] = None
+    itm_y: Optional[float] = None
+
+
+def _serialise_deal(cp: ComparisonProperty) -> dict:
+    return {
+        "address": cp.address,
+        "rooms": cp.rooms,
+        "floor": cp.floor,
+        "built_area": cp.built_area,
+        "balcony_area": cp.balcony_area,
+        "price": cp.price,
+        "notes": cp.notes,
+    }
+
+
+@router.post("/comparables")
+async def comparables_endpoint(req: _ComparablesRequest):
+    """Best-effort fetch of recent transactions around a coordinate.
+
+    The handler never returns 5xx — every failure path emits HTTP 200
+    with ``success=false`` plus a Hebrew ``message_he`` so the form can
+    show the user a sentence they can act on (per CLAUDE.md A.8).
+    """
+    radius = max(50, min(int(req.radius_m or 300), 5000))
+
+    if req.itm_x is not None and req.itm_y is not None:
+        itm_x, itm_y = float(req.itm_x), float(req.itm_y)
+    else:
+        coords = nadlan_client.address_to_itm(req.address)
+        if coords is None:
+            return {
+                "success": False,
+                "error_code": "GEOCODING_FAILED",
+                "message_he": (
+                    "לא הצלחנו לזהות את הכתובת. אנא הזן גוש/חלקה או "
+                    "קואורדינטות ידנית."
+                ),
+            }
+        itm_x, itm_y = coords
+
+    try:
+        deals = nadlan_client.fetch_recent_deals(
+            itm_x, itm_y, radius, address_label=(req.address or "").strip(),
+        )
+    except nadlan_client.NadlanFetchError as e:
+        return {
+            "success": False,
+            "error_code": "NADLAN_UNAVAILABLE",
+            "message_he": str(e),
+        }
+    except Exception as e:
+        logger.exception("nadlan fetch raised unexpectedly")
+        return {
+            "success": False,
+            "error_code": "NADLAN_UNAVAILABLE",
+            "message_he": (
+                "שירות נדל\"ן.gov.il לא זמין כרגע. אנא הזן עסקאות ידנית "
+                "או נסה שוב בעוד דקה."
+            ),
+        }
+
+    if not deals:
+        return {
+            "success": True,
+            "deals": [],
+            "fetched_at": date.today().isoformat(),
+            "source": "nadlan.gov.il",
+            "message_he": "לא נמצאו עסקאות ברדיוס שבחרת. נסה להגדיל את הרדיוס.",
+        }
+
+    return {
+        "success": True,
+        "deals": [_serialise_deal(d) for d in deals],
+        "fetched_at": date.today().isoformat(),
+        "source": "nadlan.gov.il",
+    }
+
+
 # ── Generation endpoint ───────────────────────────────────────────────────────
+
+def _build_comparables(
+    addresses: List[str],
+    rooms: List[str],
+    floors: List[str],
+    built_areas: List[str],
+    balcony_areas: List[str],
+    prices: List[str],
+    notes_: List[str],
+    outliers: List[str],
+) -> List[ComparisonProperty]:
+    """Zip parallel ``comparable_*[]`` form arrays into ``ComparisonProperty`` rows.
+
+    The form only sends rows the appraiser kept ticked, so an empty
+    ``addresses`` list means "no comparables this report" — return ``[]``
+    rather than synthesising rows. ``balcony_area`` stays ``None`` when
+    blank; A.3 forbids fabricating zero where the source has nothing.
+    """
+    n = len(addresses)
+    if n == 0:
+        return []
+
+    def _at(arr: List[str], i: int, default: str = "") -> str:
+        return arr[i] if i < len(arr) else default
+
+    out: List[ComparisonProperty] = []
+    for i in range(n):
+        built = _f(_at(built_areas, i), 0.0)
+        price = _f(_at(prices, i), 0.0)
+        if built <= 0 or price <= 0:
+            # No usable area or price → skip rather than render a junk row.
+            continue
+        balcony_raw = _at(balcony_areas, i).strip()
+        balcony: Optional[float] = (
+            _f(balcony_raw) if balcony_raw not in ("", "None") else None
+        )
+        if balcony is not None and balcony <= 0:
+            balcony = None
+        out.append(
+            ComparisonProperty(
+                address=_at(addresses, i).strip(),
+                floor=_at(floors, i).strip(),
+                rooms=_at(rooms, i).strip(),
+                built_area=built,
+                balcony_area=balcony,
+                price=price,
+                notes=_at(notes_, i).strip(),
+                is_outlier=_bool(_at(outliers, i, "false")),
+            )
+        )
+    return out
+
 
 _PURPOSE_MAP = {
     "שוק": ReportPurpose.MARKET,
@@ -173,6 +319,15 @@ async def generate(
     property_images: List[UploadFile] = File([]),
     plan_docs: List[UploadFile] = File([]),
     plan_types: List[str] = Form([]),
+    comparable_address: List[str] = Form([]),
+    comparable_rooms: List[str] = Form([]),
+    comparable_floor: List[str] = Form([]),
+    comparable_built_area: List[str] = Form([]),
+    comparable_balcony_area: List[str] = Form([]),
+    comparable_price: List[str] = Form([]),
+    comparable_notes: List[str] = Form([]),
+    comparable_is_outlier: List[str] = Form([]),
+    comparables_fetched_at: str = Form(""),
 ):
     today = _today_str()
     city, street, house_num = _parse_address(address)
@@ -310,12 +465,22 @@ async def generate(
         completion_cert_date="",
         balcony_closed_without_permit=False,
         zoning_for_principles=land_use.strip() or "יש להשלים",
-        comparison_properties=[],
+        comparison_properties=_build_comparables(
+            addresses=comparable_address,
+            rooms=comparable_rooms,
+            floors=comparable_floor,
+            built_areas=comparable_built_area,
+            balcony_areas=comparable_balcony_area,
+            prices=comparable_price,
+            notes_=comparable_notes,
+            outliers=comparable_is_outlier,
+        ),
         sqm_equiv_price=_f(final_value) / (_f(built_area) or 1),
         final_value=_f(final_value),
         purchase_date=purch_date,
         purchase_price=_f(purchase_price, 0.0),
         special_notes=notes.strip(),
+        comparables_fetched_at=(comparables_fetched_at.strip() or None),
         property_images=img_bytes,
         planning_images=plan_imgs,
     )
