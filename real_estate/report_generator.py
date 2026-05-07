@@ -1,15 +1,18 @@
 """Report generator — builds all sections of the Word document."""
 import io
 from docx import Document
-from docx.shared import Cm
+from docx.shared import Cm, Pt
+from docx.oxml.ns import qn
 
 from .models import (
     PropertyInput, ReportPurpose, RightsType, FinishLevel, PermitStatus, ClientGender
 )
 from .docx_utils import (
     make_rtl_doc, add_para, add_heading, add_bullet, set_cell, make_table,
+    add_field_line, set_cell_shading, _apply_rtl_para, _apply_rtl_run,
     FONT_BODY, FONT_HEADING1, FONT_HEADING2, FONT_TITLE,
 )
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from . import skill_loader
 
 # ── Hebrew helpers ────────────────────────────────────────────────────────────
@@ -102,6 +105,11 @@ def floor_ord(n: int) -> str:
     return _FLOOR_ORD.get(n, str(n))
 
 
+def _fmt_rooms(rooms: float) -> str:
+    """Render the room count without a trailing '.0' for whole numbers."""
+    return f"{rooms:g}"
+
+
 def rights_display(rt: RightsType) -> str:
     return skill_loader.get({
         RightsType.PRIVATE: "rights.private",
@@ -133,7 +141,7 @@ def _section_01_title(doc: Document, d: PropertyInput):
         "" if d.report_purpose == ReportPurpose.MARKET
         else skill_loader.get("section_01.title_full_suffix")
     )
-    prop_type = skill_loader.render("section_01.prop_type_apartment", rooms=d.rooms)
+    prop_type = skill_loader.render("section_01.prop_type_apartment", rooms=_fmt_rooms(d.rooms))
 
     # Header table (4 rows × 1 col)
     tbl = make_table(doc, 4, 1)
@@ -195,11 +203,16 @@ def _section_01_title(doc: Document, d: PropertyInput):
 
 
 def _section_02_details_table(doc: Document, d: PropertyInput):
-    """טבלת פרטי הנכס"""
+    """פרטי הנכס — פסקאות עם tab stops, ללא גבולות טבלה.
+
+    הדוח המקורי של המשרד אינו משתמש בטבלה כאן אלא בפסקאות מסודרות
+    (תווית מודגשת → tab → ":" → tab → ערך). כל פסקה היא RTL עם
+    tab stops קבועים, כדי שכל השורות יתיישרו זו תחת זו.
+    """
     add_heading(doc, skill_loader.get("section_02.heading"), level=2)
 
     floor_o = floor_ord(d.floor)
-    apt_desc = skill_loader.render("section_02.apt_desc", rooms=d.rooms, floor_ord=floor_o)
+    apt_desc = skill_loader.render("section_02.apt_desc", rooms=_fmt_rooms(d.rooms), floor_ord=floor_o)
 
     attachments = []
     if d.has_parking:
@@ -213,36 +226,33 @@ def _section_02_details_table(doc: Document, d: PropertyInput):
             "section_02.attachment.garden", garden_area=d.garden_area))
 
     rows = [
-        (skill_loader.get("section_02.label.purpose"), purpose_display(d.report_purpose), False),
-        (skill_loader.get("section_02.label.client"), d.client_name, False),
-        (skill_loader.get("section_02.label.rights_owner"), d.rights_owner, False),
-        (skill_loader.get("section_02.label.determining_date"), d.determining_date, False),
-        (skill_loader.get("section_02.label.visit_date"), d.visit_date, False),
-        (skill_loader.get("section_02.label.block"), d.block, False),
-        (skill_loader.get("section_02.label.parcel"), d.parcel, False),
-        (skill_loader.get("section_02.label.sub_parcel"), d.sub_parcel, False),
+        (skill_loader.get("section_02.label.purpose"), purpose_display(d.report_purpose)),
+        (skill_loader.get("section_02.label.client"), d.client_name),
+        (skill_loader.get("section_02.label.rights_owner"), d.rights_owner),
+        (skill_loader.get("section_02.label.determining_date"), d.determining_date),
+        (skill_loader.get("section_02.label.visit_date"), d.visit_date),
+        (skill_loader.get("section_02.label.block"), d.block),
+        (skill_loader.get("section_02.label.parcel"), d.parcel),
+        (skill_loader.get("section_02.label.sub_parcel"), d.sub_parcel),
         (skill_loader.get("section_02.label.building"),
          skill_loader.render(
              "section_02.building_desc",
              total_floors=d.total_floors, units_count=d.units_count,
-         ),
-         False),
-        (skill_loader.get("section_02.label.apartment"), apt_desc, True),
+         )),
+        (skill_loader.get("section_02.label.apartment"), apt_desc),
         (skill_loader.get("section_02.label.registered_area"),
-         skill_loader.render("section_02.value.registered_area", area=d.registered_area), False),
+         skill_loader.render("section_02.value.registered_area", area=d.registered_area)),
         (skill_loader.get("section_02.label.built_area"),
-         skill_loader.render("section_02.value.built_area", area=d.built_area), False),
-        (skill_loader.get("section_02.label.location"), d.address, False),
-        (skill_loader.get("section_02.label.rights"), rights_display(d.rights_type), False),
+         skill_loader.render("section_02.value.built_area", area=d.built_area)),
+        (skill_loader.get("section_02.label.location"), d.address),
+        (skill_loader.get("section_02.label.rights"), rights_display(d.rights_type)),
     ]
     if attachments:
         rows.append((skill_loader.get("section_02.label.attachments"),
-                     ", ".join(attachments), False))
+                     ", ".join(attachments)))
 
-    tbl = make_table(doc, len(rows), 2, col_widths_cm=[4.5, 11.5])
-    for i, (label, value, bold_val) in enumerate(rows):
-        set_cell(tbl.rows[i].cells[0], label, bold=True)
-        set_cell(tbl.rows[i].cells[1], value, bold=bold_val)
+    for label, value in rows:
+        add_field_line(doc, label, value)
 
     add_para(doc, "")
 
@@ -320,7 +330,7 @@ def _section_03_description(doc: Document, d: PropertyInput):
         doc,
         skill_loader.render(
             "section_03.apt.opening",
-            rooms=d.rooms, floor_ord=floor_o, air=air,
+            rooms=_fmt_rooms(d.rooms), floor_ord=floor_o, air=air,
         ),
         bold=True,
     )
@@ -533,7 +543,7 @@ def _section_06_valuation(doc: Document, d: PropertyInput):
         ),
         skill_loader.render(
             "section_06.principles.general.apartment",
-            floor_ord=floor_o, rooms=d.rooms, air=d.air_directions,
+            floor_ord=floor_o, rooms=_fmt_rooms(d.rooms), air=d.air_directions,
         ),
         area_bullet,
         skill_loader.render("section_06.principles.general.ceiling",
@@ -728,11 +738,61 @@ def _section_07_tax(doc: Document, d: PropertyInput):
         set_cell(ttbl.rows[i].cells[1], val, bold=bold_row)
 
 
+def _section_00_cover(doc: Document, d: PropertyInput):
+    """עמוד שער — תיבה אפורה עם 4 שורות כותרת ותמונת חזית.
+
+    השורה הראשונה כוללת את הסיומת " מלאה" רק בדוחות תקן 19 ופינוי-בינוי.
+    התמונה הראשונה מ-`property_images` משובצת מתחת לתיבה במידה שקיימת —
+    אם אין, העמוד נשאר עם הכותרת בלבד.
+    """
+    suffix = " מלאה" if d.report_purpose != ReportPurpose.MARKET else ""
+    prop_type = skill_loader.render("section_01.prop_type_apartment",
+                                    rooms=_fmt_rooms(d.rooms))
+    title_lines = [
+        (f"חוות דעת - שומת מקרקעין{suffix}", FONT_TITLE),
+        (f"הנדון: אומדן שווי {prop_type}", FONT_HEADING1),
+        (f"תת חלקה {d.sub_parcel}, חלקה {d.parcel} בגוש {d.block}", FONT_HEADING1),
+        (d.address, FONT_HEADING1),
+    ]
+
+    tbl = make_table(doc, 1, 1)
+    cell = tbl.rows[0].cells[0]
+    set_cell_shading(cell, "D9D9D9")
+
+    # מנקים את הפסקה ברירת המחדל בתוך התא
+    tc = cell._tc
+    for p_el in tc.findall(qn("w:p")):
+        tc.remove(p_el)
+
+    for line, size in title_lines:
+        p = cell.add_paragraph()
+        _apply_rtl_para(p, align_right=False)
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_after = Pt(4)
+        run = p.add_run(line)
+        _apply_rtl_run(run, size, bold=True, underline=True)
+
+    add_para(doc, "", space_after=12)
+
+    if d.property_images:
+        p = doc.add_paragraph()
+        _apply_rtl_para(p, align_right=False)
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        try:
+            p.add_run().add_picture(io.BytesIO(d.property_images[0]), width=Cm(13))
+        except Exception:
+            # תמונה לא תקינה — מדלגים בשקט; השער עדיין ייראה תקני
+            pass
+
+
 def _section_photos(doc: Document, d: PropertyInput):
     if not d.property_images:
         return
     add_heading(doc, skill_loader.get("section_photos.heading"))
     _embed_images(doc, d.property_images, width_cm=7.5)
+    # אין כיום שדה כיתובים לתמונות; מסמנים לשמאי להוסיף ידנית
+    add_para(doc, "נא להוסיף כיתובים לתמונות בעריכה ידנית.",
+             font_size=FONT_BODY)
 
 
 def _section_notes(doc: Document, d: PropertyInput):
@@ -748,6 +808,8 @@ def _section_notes(doc: Document, d: PropertyInput):
 
 def _build_doc(data: PropertyInput) -> Document:
     doc = make_rtl_doc()
+    _section_00_cover(doc, data)
+    doc.add_page_break()
     _section_01_title(doc, data)
     doc.add_page_break()
     _section_02_details_table(doc, data)
