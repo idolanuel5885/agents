@@ -45,6 +45,19 @@ logger = logging.getLogger(__name__)
 # Railway sometimes swallows logger.info but always forwards prints.
 DEBUG_NADLAN = os.environ.get("DEBUG_NADLAN") == "1"
 
+# Print the flag state at module import so the user can confirm in
+# Railway logs whether the env var actually reached the worker. This
+# is the first thing a developer should look for after a redeploy:
+# if this line is missing, the module wasn't imported at all; if it
+# says "DEBUG_NADLAN=False" the env var didn't propagate (Railway
+# requires a redeploy, not just a restart, for new env vars).
+print(
+    f"[NADLAN DEBUG] module loaded at import; "
+    f"DEBUG_NADLAN={DEBUG_NADLAN} "
+    f"(raw env={os.environ.get('DEBUG_NADLAN')!r})",
+    flush=True,
+)
+
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -94,24 +107,37 @@ def address_to_itm(address: str) -> Optional[tuple[float, float]]:
     have to remember it.
     """
     addr = (address or "").strip()
+    if DEBUG_NADLAN:
+        print(f"[NADLAN DEBUG] address_to_itm called with address={addr!r}", flush=True)
     if not addr:
+        if DEBUG_NADLAN:
+            print("[NADLAN DEBUG] address_to_itm: blank address → None", flush=True)
         return None
 
     _rate_limit()
 
     coords = geocode(addr)
+    if DEBUG_NADLAN:
+        print(f"[NADLAN DEBUG] geocode({addr!r}) → {coords!r}", flush=True)
     if coords is None:
+        if DEBUG_NADLAN:
+            print("[NADLAN DEBUG] address_to_itm: geocode returned None → None", flush=True)
         return None
 
     lat, lon = coords
     try:
-        return to_itm(lat, lon)
-    except Exception:
+        itm = to_itm(lat, lon)
+    except Exception as e:
         # to_itm only fails when pyproj is missing (very unusual in
         # production) — degrade gracefully rather than surface the
         # ImportError to the appraiser.
+        if DEBUG_NADLAN:
+            print(f"[NADLAN DEBUG] to_itm raised: {type(e).__name__}: {e}", flush=True)
         logger.exception("address_to_itm: ITM projection failed")
         return None
+    if DEBUG_NADLAN:
+        print(f"[NADLAN DEBUG] to_itm({lat}, {lon}) → {itm!r}", flush=True)
+    return itm
 
 
 # ── Public helper: fetch transactions ────────────────────────────────────────
