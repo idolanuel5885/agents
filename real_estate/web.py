@@ -13,6 +13,11 @@ from .models import (
     PermitStatus, ClientGender,
 )
 from .report_generator import generate_report_bytes
+from . import claude_descriptions
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 def _bool(v: str) -> bool:
     return str(v).lower() in ("true", "1", "on", "yes")
@@ -127,6 +132,9 @@ async def generate(
     purchase_price: str = Form(""),
     notes: str = Form(""),
     street_description: str = Form(""),
+    city_description: str = Form(""),
+    neighborhood_name: str = Form(""),
+    neighborhood_description: str = Form(""),
     property_images: List[UploadFile] = File([]),
     plan_docs: List[UploadFile] = File([]),
     plan_types: List[str] = Form([]),
@@ -163,6 +171,40 @@ async def generate(
                 ),
             )
         plan_imgs.append((t, await f.read()))
+
+    # Auto-fill city/neighborhood descriptions via Claude if the appraiser
+    # left them blank. Failures degrade gracefully to the existing
+    # "יש להשלים" placeholder — generation never blocks on the API.
+    DEFAULT_CITY = f"{city} — יש להשלים תיאור עיר."
+    DEFAULT_NBHD_NAME = "יש להשלים"
+    DEFAULT_NBHD_DESC = "יש להשלים — תיאור השכונה."
+
+    def _is_empty_or_default(val: str, default: str) -> bool:
+        v = (val or "").strip()
+        return (not v) or v == default.strip() or "יש להשלים" in v
+
+    final_city_desc = (city_description or "").strip() or DEFAULT_CITY
+    if _is_empty_or_default(city_description, DEFAULT_CITY) and city:
+        generated = claude_descriptions.try_describe_city(city)
+        if generated:
+            final_city_desc = claude_descriptions.with_footnote(generated)
+            logger.info("city_description auto-filled via Claude for %r", city)
+
+    final_nbhd_name = (neighborhood_name or "").strip() or DEFAULT_NBHD_NAME
+    nbhd_for_api = (neighborhood_name or "").strip()
+    final_nbhd_desc = (neighborhood_description or "").strip() or DEFAULT_NBHD_DESC
+    if (
+        _is_empty_or_default(neighborhood_description, DEFAULT_NBHD_DESC)
+        and city
+        and nbhd_for_api
+    ):
+        generated = claude_descriptions.try_describe_neighborhood(city, nbhd_for_api)
+        if generated:
+            final_nbhd_desc = claude_descriptions.with_footnote(generated)
+            logger.info(
+                "neighborhood_description auto-filled via Claude for %r/%r",
+                city, nbhd_for_api,
+            )
 
     data = PropertyInput(
         report_number=f"WEB-{date.today().strftime('%Y%m%d')}",
@@ -211,9 +253,9 @@ async def generate(
         rental_start_date="יש להשלים" if is_rented else "",
         rental_end_date=rental_end,
         monthly_rent=_f(monthly_rent, 0.0),
-        city_description=f"{city} — יש להשלים תיאור עיר.",
-        neighborhood_name="יש להשלים",
-        neighborhood_description="יש להשלים — תיאור השכונה.",
+        city_description=final_city_desc,
+        neighborhood_name=final_nbhd_name,
+        neighborhood_description=final_nbhd_desc,
         street_description=street_description.strip(),
         street_type="פנימי",
         street_direction="דו-סטרי",

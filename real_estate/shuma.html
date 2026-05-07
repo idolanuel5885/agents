@@ -440,6 +440,32 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════ תיאור עיר ושכונה -->
+  <div class="card">
+    <div class="card-header">
+      <h2>תיאור עיר ושכונה</h2>
+      <span class="badge-opt">אופציונלי</span>
+    </div>
+    <div class="f">
+      <label>שם השכונה</label>
+      <input type="text" id="neighborhood_name" name="neighborhood_name"
+             placeholder="לדוגמה: רמת אביב">
+      <span class="hint">נדרש כדי לאפשר השלמה אוטומטית של תיאור השכונה.</span>
+    </div>
+    <div class="f">
+      <label>תיאור העיר (פסקה חופשית)</label>
+      <textarea id="city_description" name="city_description" rows="3"
+                placeholder="ניתן להשאיר ריק — Claude ימלא תיאור איכותני אוטומטית."></textarea>
+      <span class="hint">אם השדה ריק, ייקרא Claude API להפקת תיאור איכותני (ללא נתונים כמותיים). יש לאמת את התוצאה.</span>
+    </div>
+    <div class="f">
+      <label>תיאור השכונה (פסקה חופשית)</label>
+      <textarea id="neighborhood_description" name="neighborhood_description" rows="3"
+                placeholder="ניתן להשאיר ריק — Claude ימלא תיאור איכותני אוטומטית."></textarea>
+      <span class="hint">דורש שם שכונה. אם השדה ריק, ייקרא Claude API להפקת תיאור איכותני.</span>
+    </div>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════════ NEW: תמונות הנכס -->
   <div class="card">
     <div class="card-header">
