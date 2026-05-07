@@ -73,12 +73,16 @@ def _configure_section_a4(section):
 
 
 def _set_doc_rtl_defaults(doc: Document):
-    """Force the Normal style to RTL + David at body size."""
+    """Force the Normal style to David at body size, jc=right.
+
+    הערה לגבי bidi: לפי בדיקה של דוחות המשרד, לא משתמשים ב-`<w:bidi/>`
+    ברמת הסטיילים או הפסקאות. ה-`<w:bidi/>` יושב רק על ה-section, וכל
+    run עברי נושא `<w:rtl/>` בעצמו. הסיבה: ב-OOXML, פסקה עם bidi הופכת
+    `jc=right` ללוגי ("end") — כלומר בפועל-שמאל ב-RTL. בלי bidi בפסקה,
+    `jc=right` משמעו פיזית-ימין, וזה מה שאנחנו רוצים.
+    """
     normal = doc.styles["Normal"]
     pPr = normal.element.get_or_add_pPr()
-    bidi = OxmlElement("w:bidi")
-    bidi.set(qn("w:val"), "1")
-    pPr.append(bidi)
     jc = OxmlElement("w:jc")
     jc.set(qn("w:val"), "right")
     pPr.append(jc)
@@ -146,13 +150,13 @@ def _attach_header_footer(doc: Document):
 # ── Paragraph / Run helpers ───────────────────────────────────────────────────
 
 def _apply_rtl_para(p, align_right: bool = True):
-    """Put `<w:bidi/>` (and optionally jc=right) on the paragraph."""
+    """Set jc=right (or leave alignment alone) on a paragraph.
+
+    החלטנו לא להוסיף `<w:bidi/>` ברמת הפסקה — ראה ההערה ב-
+    `_set_doc_rtl_defaults`. ה-RTL של הטקסט מגיע מה-`<w:rtl/>` של ה-runs
+    ומ-`<w:bidi/>` ברמת ה-section. ככה `jc=right` נשאר פיזית-ימין.
+    """
     pPr = p._p.get_or_add_pPr()
-    # למנוע כפילות אם כבר הוחל
-    if pPr.find(qn("w:bidi")) is None:
-        bidi = OxmlElement("w:bidi")
-        bidi.set(qn("w:val"), "1")
-        pPr.append(bidi)
     if align_right:
         jc = pPr.find(qn("w:jc"))
         if jc is None:
@@ -230,8 +234,8 @@ def add_bullet(doc, text: str, font_size: int = FONT_BODY) -> any:
 
     הסיבה שאנחנו לא משתמשים ב-numbering אמיתי: python-docx לא חושף
     הגדרת numbering ידידותית, ובמיוחד לא RTL numbering. ה-glyph של ה-bullet
-    כתוב ישירות ברן עם דגל RTL — Word יראה אותו בצד ימין כי הפסקה בעצמה
-    bidi+jc=right וה-run עם <w:rtl/>.
+    כתוב ישירות ברן עם דגל RTL — Word יראה אותו בצד ימין כי הפסקה היא
+    `jc=right` (פיזית-ימין, בלי bidi בפסקה) וה-run נושא `<w:rtl/>`.
     """
     p = doc.add_paragraph()
     _apply_rtl_para(p)
@@ -281,9 +285,7 @@ def set_cell(cell, text: str, bold: bool = False, font_size: int = FONT_BODY):
 
     pPr = OxmlElement("w:pPr")
     p_el.insert(0, pPr)
-    bidi_el = OxmlElement("w:bidi")
-    bidi_el.set(qn("w:val"), "1")
-    pPr.append(bidi_el)
+    # אין bidi ברמת הפסקה — ראה ההערה ב-_set_doc_rtl_defaults.
     jc_el = OxmlElement("w:jc")
     jc_el.set(qn("w:val"), "right")
     pPr.append(jc_el)
@@ -341,21 +343,28 @@ def make_table(doc, num_rows: int, num_cols: int,
 
 def add_field_line(doc, label: str, value: str,
                    label_pos_dxa: int = 2636,
-                   colon_pos_dxa: int = 3203):
+                   colon_pos_dxa: int = 3203,
+                   right_indent_dxa: int = 1800):
     """Render `<bold-label> [TAB] : [TAB] <value>` as one RTL paragraph.
 
     משמש בסעיף "פרטי הנכס" כדי להחליף טבלה בפסקאות מסודרות עם tab stops —
-    הצורה שבה הדוח המקורי של המשרד בנוי. ה-tab stops קבועים ב-DXA כדי
-    שהשורות יושבות זו תחת זו.
+    הצורה שבה הדוח המקורי של המשרד בנוי.
+
+    `right_indent_dxa` דוחק את הבלוק שמאלה מקצה ימין כדי שהוא ייראה
+    ממורכז ביחס לעמוד (ולא צמוד לקצה הדף). אין `<w:bidi/>` ברמת הפסקה
+    כדי שה-`jc=right` יהיה פיזית-ימין.
     """
     p = doc.add_paragraph()
     pPr = p._p.get_or_add_pPr()
 
-    bidi = OxmlElement("w:bidi")
-    pPr.append(bidi)
     jc = OxmlElement("w:jc")
     jc.set(qn("w:val"), "right")
     pPr.append(jc)
+
+    if right_indent_dxa:
+        ind = OxmlElement("w:ind")
+        ind.set(qn("w:right"), str(right_indent_dxa))
+        pPr.append(ind)
 
     tabs = OxmlElement("w:tabs")
     for pos in (label_pos_dxa, colon_pos_dxa):
