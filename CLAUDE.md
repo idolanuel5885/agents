@@ -139,6 +139,7 @@ Entry points:
 |---|---|---|
 | `GET /shuma` | `real_estate/web.py:get_form` | Returns the HTML form |
 | `POST /shuma/generate` | `real_estate/web.py:generate` | Builds `PropertyInput` from form data, generates the docx, returns as download |
+| `POST /shuma/lookup-parcel` | `real_estate/web.py:lookup_parcel_endpoint` | Best-effort lookup of block/parcel/land-use/plans/boundaries from an address — see B.12 |
 | `python real_estate/main.py` | `real_estate/main.py` | CLI: interactive prompts → docx file |
 | `python run_demo.py [type]` | `run_demo.py` | Generates a demo report without form input |
 
@@ -158,6 +159,8 @@ real_estate/
 ├── shuma.html         single-file HTML+CSS+JS form
 ├── docx_utils.py      python-docx RTL helpers
 ├── report_generator.py the report builder (templates + all sections)
+├── claude_descriptions.py auto-fill city/neighborhood (B.11)
+├── parcel_lookup.py   address → block/parcel/land-use/plans/boundaries (B.12)
 ├── demo_data.py       sample PropertyInput for the three report types
 └── main.py            CLI entry point
 ```
@@ -341,10 +344,10 @@ From root `requirements.txt`:
   Claude descriptions module (see B.11)
 - `python-docx >= 1.1.0`
 - `python-multipart >= 0.0.9`
-
-**Not currently installed** (will be needed for upcoming automation):
-no HTTP client (`requests` / `httpx`), no HTML parser, no Google SDK,
-no GIS library, no OAuth client. Add them as needed.
+- `requests >= 2.31.0` — HTTP client used by the parcel-lookup module
+  (see B.12)
+- `pyproj >= 3.6.0` — WGS84 → ITM (EPSG:2039) projection (B.12)
+- `shapely >= 2.0.0` — polygon geometry for boundary processing (B.12)
 
 ### B.10 Validation
 
@@ -409,6 +412,89 @@ performs 1-2 searches and returns a 100-token paragraph, with
 several thousand input tokens of fetched search content — see
 `descriptions_v2_report.md` for the worked estimate.
 
+### B.12 Parcel-lookup module (auto-fill block / parcel / land-use / plans / boundaries)
+
+`real_estate/parcel_lookup.py` exposes one public function,
+`lookup_parcel(address) -> ParcelLookupResult`, that turns a Hebrew
+address into structured property data the appraiser can review and
+edit before producing the report. The Web form invokes it via the
+`POST /shuma/lookup-parcel` endpoint when the appraiser presses the
+"מלא נתוני חלקה אוטומטית" button (see `shuma.html`).
+
+**Pipeline:**
+
+1. **Geocoding.** `_geocode(address)` calls
+   `https://nominatim.openstreetmap.org/search` with `countrycodes=il`
+   and a descriptive `User-Agent` (Nominatim's usage policy blocks
+   anonymous requests). Returns `(lat, lon)` in WGS84.
+2. **Projection.** `_to_itm(lat, lon)` projects to Israeli Transverse
+   Mercator (EPSG:2039) using `pyproj.Transformer` — Israeli planning
+   services expect ITM coordinates.
+3. **ArcGIS query.** `_list_layers()` fetches the layer index of
+   `https://ags.iplan.gov.il/arcgis/rest/services/PlanningPublic/Xplan/MapServer`
+   and `_find_layer_id` matches layer names against substring hints
+   (`parcel_all`, `designation`, `plan`, plus Hebrew equivalents) so
+   we don't hardcode IDs that change across service versions. The
+   service is then queried at the parcel point for parcel attributes,
+   land-use designation, and applicable plans, and at the parcel
+   bounding-box for neighbouring parcel polygons.
+4. **Boundary processing.** `_process_boundaries` reduces neighbouring
+   polygons into four cardinal descriptions. Per neighbour: compute
+   centroid offset from the subject parcel, classify by dominant axis
+   (north / south / east / west), keep the closest neighbour per
+   direction. This is the simplified "quadrant" strategy authorised
+   by the brief — accurate enough for the appraiser to verify and
+   adjust before signing.
+
+**Result shape** (`ParcelLookupResult.to_dict()`):
+
+```
+{
+  "ok": bool,                       # true iff block + parcel were found
+  "block": "...", "parcel": "...",
+  "land_use": "...",
+  "plans": [{number, name, designation, year}, ...],
+  "boundaries": {north, south, east, west},
+  "warnings": ["..."],              # Hebrew strings shown to the appraiser
+  "error": "..."                    # Hebrew string when the pipeline failed
+}
+```
+
+Sub-parcel (`תת-חלקה`) is **not** populated — Xplan does not expose it.
+The form keeps it as a manual field.
+
+**Wiring in the Web layer.** `web.py` adds five new optional form
+fields (`land_use`, `north_boundary`, `south_boundary`, `east_boundary`,
+`west_boundary`) to the existing `/shuma/generate` payload. They flow
+into `PropertyInput` so the report renders the looked-up values
+instead of "יש להשלים". The four `*_boundary` fields plus
+`zoning_for_principles` (= `land_use`) gracefully fall back to
+"יש להשלים" when the appraiser leaves them empty, preserving
+backwards compatibility with the previous form behaviour.
+
+**Failure modes** are surfaced to the appraiser, never raised:
+
+- Empty address → `error="הכתובת ריקה"`.
+- Nominatim fails or returns nothing → `error="הכתובת לא זוהתה ..."`.
+- Xplan unreachable → `error="שירות תכנון זמין אינו זמין ..."`.
+- Layer hint matches nothing → entry recorded in `warnings`, the
+  rest of the data is still returned.
+- Geometry parsing exception → recorded as a warning; the block /
+  parcel attributes are still returned even if boundaries failed.
+
+The Web form button shows `error` in red, fills only the blank
+fields with what was returned, and shows applicable plans in an
+informational box (the existing form has no plans-list field — wiring
+plans into structured input is a follow-up).
+
+### B.13 External integrations
+
+| Service | Endpoint | Used for | Notes |
+|---|---|---|---|
+| Nominatim (OSM) | `https://nominatim.openstreetmap.org/search` | Hebrew address → (lat, lon) | No key; requires descriptive `User-Agent`; 1 req/sec policy |
+| Iplan Xplan ArcGIS | `https://ags.iplan.gov.il/arcgis/rest/services/PlanningPublic/Xplan/MapServer` | Parcel polygon, land-use, plans, neighbouring parcels | Public; no key. Layer IDs discovered at runtime by name hints (parcel / designation / plan) |
+| Anthropic API | `https://api.anthropic.com` (via SDK) | City / neighbourhood descriptions | Requires `ANTHROPIC_API_KEY` (B.11) |
+
 ---
 
 ## Part C — Known Gaps
@@ -428,12 +514,22 @@ removed on the next CLAUDE.md cleanup.
 ### C.2 Web form covers fewer fields than CLI form
 
 The Web form collects a subset of the CLI fields. Missing fields are
-filled with the literal string `"יש להשלים"` in `web.py:155-232`. As
-a result, Web-generated reports contain visible placeholders that the
-appraiser must fill in manually. It's unclear whether this is an MVP
-shortcut or an intentional design choice — but this is exactly the
-gap that external automation (Tabu / Nadlan.gov.il / GovMap / Google)
-is meant to close.
+filled with the literal string `"יש להשלים"` in `web.py`. The gap is
+narrowing — block, parcel, land-use, and the four boundaries can now
+be populated automatically via the parcel-lookup button (B.12). Still
+missing from the web form vs. the CLI form: full street-type details,
+3+ comparables (none today), structured planning-plan rows (the
+lookup returns plans but the form has no rows to insert them into —
+they are shown in an informational box for the appraiser to copy
+manually), full tenancy agreement dates.
+
+### C.8 Sub-parcel (תת-חלקה) cannot be auto-filled
+
+The Iplan Xplan service does not expose sub-parcel data, so this
+field stays manual even when the parcel-lookup button is used. The
+form keeps `sub_parcel` as a required text input. Closing this gap
+likely requires Tabu (auth-gated) or another commercial source and is
+out of scope for the open-data integration.
 
 ### C.3 Plan documents accept non-image files
 
