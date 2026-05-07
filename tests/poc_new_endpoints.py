@@ -153,6 +153,45 @@ def _run_probes() -> None:
 
     print()
     print("=" * 60)
+    print("Test 4: Neighborhood deals JSON (Rothschild area in Tel Aviv)")
+    print("=" * 60)
+
+    try:
+        r = requests.get(
+            "https://data.nadlan.gov.il/api/pages/neighborhood/buy/65209994.json",
+            timeout=20,
+        )
+        print(f"Status: {r.status_code}")
+        print(f"Content-Type: {r.headers.get('content-type')}")
+        print(f"Response size: {len(r.content)} bytes")
+        print("First 2000 chars of body:")
+        print(r.text[:2000])
+        print()
+        if r.status_code == 200:
+            try:
+                data = r.json()
+                if isinstance(data, dict):
+                    print(f"Top-level keys: {list(data.keys())}")
+                    for k, v in data.items():
+                        if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
+                            print(f"Key '{k}' has {len(v)} items.")
+                            print(f"First item keys: {list(v[0].keys())}")
+                            print(
+                                f"First 2 items full: "
+                                f"{json.dumps(v[:2], ensure_ascii=False, indent=2)[:1500]}"
+                            )
+                            break
+                elif isinstance(data, list):
+                    print(f"Top-level is a list of {len(data)} items.")
+                    if data:
+                        print(f"First item: {json.dumps(data[0], ensure_ascii=False)[:1500]}")
+            except Exception as e:
+                print(f"Failed to parse as JSON: {e}")
+    except Exception as e:
+        print(f"FAILED: {type(e).__name__}: {e}")
+
+    print()
+    print("=" * 60)
     print("PoC complete.")
     print("=" * 60)
 
