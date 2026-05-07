@@ -50,15 +50,15 @@ _MODEL = "claude-sonnet-4-6"
 # https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
 # Using the basic version (no code-execution dependency); 5 searches is
 # more than enough for one city + one neighborhood.
+#
+# Note on user_location: the API rejects ``country: "IL"`` ("Country code
+# IL is not supported"), so we omit user_location entirely. The Hebrew
+# system prompt and the literal "בישראל" / city name in the user prompt
+# already steer searches to Israeli sources.
 _WEB_SEARCH_TOOL = {
     "type": "web_search_20250305",
     "name": "web_search",
     "max_uses": 5,
-    "user_location": {
-        "type": "approximate",
-        "country": "IL",
-        "timezone": "Asia/Jerusalem",
-    },
 }
 
 # Generous output budget — the agentic loop needs room for tool calls and
