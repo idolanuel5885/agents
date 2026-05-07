@@ -120,6 +120,31 @@ from internal/undocumented APIs may break or return wrong values).
 When designing new automations, design the review surface alongside them.
 "Fetch and insert silently" is never the right answer.
 
+### A.8 Guiding principles for external integrations
+
+External integrations (GovMap, iplan.gov.il, Tabu, Nadlan.gov.il, CBS,
+Google Maps, etc.) are valuable when they work and a liability when
+they don't. The following rules govern every external-service feature:
+
+- **Polite failure is mandatory.** If a service is unreachable,
+  unauthenticated, slow, or returns an unexpected payload, the
+  appraiser must be able to keep working manually with no
+  interruption to the form-fill → generate flow. The HTTP handler
+  returns a structured result with a Hebrew message; it never
+  raises a 500 to the appraiser.
+- **No technical errors in the UI.** SSL stack traces, JSON parse
+  failures, ArcGIS error codes, etc. must never be shown to the
+  appraiser. Translate everything into a short Hebrew sentence the
+  appraiser can act on, or hide it entirely.
+- **Hide unstable features.** If an integration is not reliable in
+  production — even temporarily — remove its entry point from the
+  UI rather than show it broken. The supporting code (module,
+  endpoint, dependencies) may stay so the feature can be re-enabled
+  cleanly when the underlying service is fixed.
+- **Source attribution stays visible.** Per A.7, any value brought in
+  from an external source must be presented with its provenance so
+  the appraiser can verify it before signing.
+
 ---
 
 ## Part B — Current State (last reviewed: initial draft, based on system audit)
@@ -412,14 +437,23 @@ performs 1-2 searches and returns a 100-token paragraph, with
 several thousand input tokens of fetched search content — see
 `descriptions_v2_report.md` for the worked estimate.
 
-### B.12 Parcel-lookup module (auto-fill block / parcel / land-use / plans / boundaries)
+### B.12 Parcel-lookup module (auto-fill block / parcel / land-use / plans / boundaries) — currently hidden in UI
 
 `real_estate/parcel_lookup.py` exposes one public function,
 `lookup_parcel(address) -> ParcelLookupResult`, that turns a Hebrew
-address into structured property data the appraiser can review and
-edit before producing the report. The Web form invokes it via the
-`POST /shuma/lookup-parcel` endpoint when the appraiser presses the
-"מלא נתוני חלקה אוטומטית" button (see `shuma.html`).
+address into structured property data. The `POST /shuma/lookup-parcel`
+endpoint is wired in `web.py` and the module + dependencies
+(`requests`, `pyproj`, `shapely`) are installed and ready.
+
+**Status: feature is hidden from the appraiser.** The "מלא נתוני חלקה
+אוטומטית" button and the five corresponding form fields (land-use +
+four boundaries) were removed from `shuma.html` because the iplan.gov.il
+ArcGIS service has an SSL/TLS compatibility issue that prevents the
+service from being reached from the Railway production host (and from
+ordinary browsers). Per A.8, an unstable integration is hidden until
+it works reliably — but the supporting code stays so the feature can
+be re-enabled by re-adding the button + fields when the upstream
+issue is fixed or an alternative endpoint is wired in.
 
 **Pipeline:**
 
@@ -514,22 +548,37 @@ removed on the next CLAUDE.md cleanup.
 ### C.2 Web form covers fewer fields than CLI form
 
 The Web form collects a subset of the CLI fields. Missing fields are
-filled with the literal string `"יש להשלים"` in `web.py`. The gap is
-narrowing — block, parcel, land-use, and the four boundaries can now
-be populated automatically via the parcel-lookup button (B.12). Still
-missing from the web form vs. the CLI form: full street-type details,
-3+ comparables (none today), structured planning-plan rows (the
-lookup returns plans but the form has no rows to insert them into —
-they are shown in an informational box for the appraiser to copy
-manually), full tenancy agreement dates.
+filled with the literal string `"יש להשלים"` in `web.py`. The CLI
+form covers parcel boundaries, land-use, planning plans, full
+street-type details, 3+ comparables, full tenancy agreement dates,
+etc.
 
-### C.8 Sub-parcel (תת-חלקה) cannot be auto-filled
+The parcel-lookup integration (B.12) was meant to close part of this
+gap (block/parcel/land-use/plans/boundaries) but is currently hidden
+from the UI — see C.10. So Web reports still render placeholders for
+all of those today.
 
-The Iplan Xplan service does not expose sub-parcel data, so this
-field stays manual even when the parcel-lookup button is used. The
-form keeps `sub_parcel` as a required text input. Closing this gap
-likely requires Tabu (auth-gated) or another commercial source and is
-out of scope for the open-data integration.
+### C.10 Parcel-lookup feature hidden — boundaries / land-use / plans still manual
+
+The parcel-lookup module (`real_estate/parcel_lookup.py`) and the
+`POST /shuma/lookup-parcel` endpoint are implemented and wired, but
+the UI button and the five matching form fields were removed because
+the iplan.gov.il service is not reachable from Railway / browsers
+due to an SSL/TLS handshake issue on their side.
+
+Practical effect: in Web reports, the four parcel boundaries, the
+land-use designation, and the planning-plans list still render as
+"יש להשלים" or remain empty — there is no UI path to fill them.
+The supporting code is ready to re-enable when iplan fixes its TLS
+or when we wire an alternative source. See B.12 and A.8.
+
+### C.11 Sub-parcel (תת-חלקה) cannot be auto-filled
+
+The Iplan Xplan service does not expose sub-parcel data, so even
+when the parcel-lookup feature is re-enabled this field would stay
+manual. The form keeps `sub_parcel` as a required text input.
+Closing this gap likely requires Tabu (auth-gated) or another
+commercial source and is out of scope for the open-data integration.
 
 ### C.3 Plan documents accept non-image files
 
