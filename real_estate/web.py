@@ -107,9 +107,20 @@ async def lookup_parcel_endpoint(address: str = Form(...)):
     return result.to_dict()
 
 
+# ── PoC endpoint (temporary) ──────────────────────────────────────────────────
+# Probes the new endpoints discovered in nadlan.gov.il's Network tab to
+# learn whether Railway can reach them at all and what they return.
+# Removed once we know the answer. Returns text/plain so the result is
+# readable in a browser without devtools. See tests/poc_new_endpoints.py.
+
+
+@router.get("/poc-test", response_class=Response)
+async def poc_test_endpoint():
+    from tests.poc_new_endpoints import run_poc
+    return Response(content=run_poc(), media_type="text/plain; charset=utf-8")
+
+
 # ── Comparable transactions endpoint ──────────────────────────────────────────
-
-
 class _ComparablesRequest(BaseModel):
     """Body for ``POST /shuma/comparables``.
 
