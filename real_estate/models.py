@@ -1,6 +1,6 @@
 """Data models for real estate appraisal reports."""
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 from enum import Enum
 
 
@@ -40,14 +40,15 @@ class ComparisonProperty:
     floor: str
     rooms: str
     built_area: float
-    balcony_area: float
+    balcony_area: Optional[float]
     price: float
     notes: str = ""
+    is_outlier: bool = False
 
     @property
     def equiv_area(self) -> float:
         b = self.balcony_area
-        if b <= 0:
+        if not b or b <= 0:
             return self.built_area
         elif b <= 50:
             return self.built_area + b * 0.5
@@ -178,6 +179,12 @@ class PropertyInput:
 
     # Free-text notes appended to the report
     special_notes: str = ""
+
+    # Timestamp (YYYY-MM-DD) recorded when comparison_properties were fetched
+    # from nadlan.gov.il. None if the appraiser entered comparables manually
+    # or didn't load them at all — in which case the report omits the
+    # "fetched on" footnote per A.7 (no fake provenance).
+    comparables_fetched_at: Optional[str] = None
 
     # Media (bytes)
     property_images: List[bytes] = field(default_factory=list)

@@ -204,6 +204,31 @@ def _to_itm(lat: float, lon: float) -> tuple[float, float]:
     return x, y
 
 
+# ── Public wrappers for shared use (e.g. nadlan_client) ──────────────────────
+# Other modules in real_estate/ reuse the same Hebrew-address → ITM pipeline.
+# These wrappers expose the helpers without a leading underscore and convert
+# the internal LookupError_ into a None return so callers can degrade
+# gracefully without importing the private exception type.
+
+
+def geocode(address: str) -> tuple[float, float] | None:
+    """Hebrew address → (lat, lon) WGS84, or ``None`` on failure.
+
+    Wraps :func:`_geocode` and swallows :class:`LookupError_` so callers
+    that only need a best-effort geocode don't have to import the
+    internal exception. Network/parsing failures return ``None``.
+    """
+    try:
+        return _geocode(address)
+    except LookupError_:
+        return None
+
+
+def to_itm(lat: float, lon: float) -> tuple[float, float]:
+    """Project (lat, lon) WGS84 → ITM (EPSG:2039). Returns (x, y) in metres."""
+    return _to_itm(lat, lon)
+
+
 # ── Step 3: Xplan ArcGIS query ───────────────────────────────────────────────
 
 

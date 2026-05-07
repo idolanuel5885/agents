@@ -1037,6 +1037,77 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════ 07b: Comparables -->
+  <div class="card">
+    <div class="card-header">
+      <h2>עסקאות השוואה</h2>
+      <span class="badge-opt">אופציונלי — אוטומטי מנדל"ן.gov.il</span>
+    </div>
+    <div class="card-body">
+    <div class="fg">
+
+      <div class="f">
+        <label for="comparables_radius">רדיוס חיפוש (מטרים): <span id="comparables-radius-value">300</span></label>
+        <input type="range" id="comparables_radius" min="100" max="1000" step="50" value="300">
+        <span class="hint">100–1000 מטרים סביב הנכס</span>
+      </div>
+
+      <div class="f">
+        <label>&nbsp;</label>
+        <button type="button" id="comparables-load-btn" class="btn-secondary">
+          טען עסקאות השוואה
+        </button>
+      </div>
+
+    </div>
+
+    <div id="comparables-status" class="hint" style="margin-top:10px;"></div>
+
+    <!-- Manual ITM coordinate fallback, shown only after geocoding fails. -->
+    <div id="comparables-itm-fallback" class="fg hidden" style="margin-top:10px;">
+      <div class="f">
+        <label>X ידני (ITM)</label>
+        <input type="number" id="comparables_itm_x" step="any" placeholder="180555">
+      </div>
+      <div class="f">
+        <label>Y ידני (ITM)</label>
+        <input type="number" id="comparables_itm_y" step="any" placeholder="663680">
+      </div>
+      <div class="f">
+        <label>&nbsp;</label>
+        <button type="button" id="comparables-itm-retry-btn" class="btn-secondary">
+          טען בקואורדינטות אלה
+        </button>
+      </div>
+    </div>
+
+    <div id="comparables-results" class="hidden" style="margin-top:14px;">
+      <div style="overflow-x:auto;">
+        <table id="comparables-table" style="width:100%; border-collapse:collapse; font-size:14px;">
+          <thead>
+            <tr>
+              <th style="border:1px solid #ddd; padding:6px;">כלול</th>
+              <th style="border:1px solid #ddd; padding:6px;">חריגה</th>
+              <th style="border:1px solid #ddd; padding:6px;">כתובת</th>
+              <th style="border:1px solid #ddd; padding:6px;">חד'</th>
+              <th style="border:1px solid #ddd; padding:6px;">קומה</th>
+              <th style="border:1px solid #ddd; padding:6px;">שטח מ"ר</th>
+              <th style="border:1px solid #ddd; padding:6px;">מרפסת מ"ר</th>
+              <th style="border:1px solid #ddd; padding:6px;">מחיר ₪</th>
+              <th style="border:1px solid #ddd; padding:6px;">הערות</th>
+            </tr>
+          </thead>
+          <tbody id="comparables-tbody"></tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin-top:8px;">
+        השמאי בוחר אילו עסקאות ייכנסו לדוח. שטח מרפסת ניתן להשלמה ידנית. סמן "חריגה" לעסקאות שיש לתת להן משקל נמוך.
+      </p>
+    </div>
+
+    </div>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════════ 08 -->
   <div class="card">
     <div class="card-header">
@@ -1173,9 +1244,15 @@
   // ── Build FormData ────────────────────────────────────────────────────────
   function buildFormData() {
     const fd = new FormData();
-    // Text fields, selects, textareas (skip file inputs and checkboxes)
+    // Text fields, selects, textareas (skip file inputs, checkboxes, and the
+    // comparables sub-form which has its own structured serialisation below).
     document.querySelectorAll('#form input:not([type="checkbox"]):not([type="file"]), #form select, #form textarea')
-      .forEach(el => { if (el.name) fd.append(el.name, el.value); });
+      .forEach(el => {
+        if (!el.name) return;
+        if (el.closest && el.closest('#comparables-results')) return;
+        if (el.id === 'comparables_radius' || el.id === 'comparables_itm_x' || el.id === 'comparables_itm_y') return;
+        fd.append(el.name, el.value);
+      });
     // Checkboxes — always send explicitly
     ['has_parking', 'has_storage', 'has_garden'].forEach(n => {
       fd.append(n, document.getElementById(n).checked ? 'true' : 'false');
@@ -1192,8 +1269,156 @@
         fd.append('plan_types', ts.value);
       }
     });
+    // Comparables — only the rows with the "include" checkbox ticked.
+    document.querySelectorAll('#comparables-tbody tr').forEach(tr => {
+      const inc = tr.querySelector('input.cmp-include');
+      if (!inc || !inc.checked) return;
+      const out = tr.querySelector('input.cmp-outlier');
+      const get = sel => (tr.querySelector(sel)?.value ?? '').trim();
+      fd.append('comparable_address',     get('input.cmp-address'));
+      fd.append('comparable_rooms',       get('input.cmp-rooms'));
+      fd.append('comparable_floor',       get('input.cmp-floor'));
+      fd.append('comparable_built_area',  get('input.cmp-built'));
+      fd.append('comparable_balcony_area', get('input.cmp-balcony'));
+      fd.append('comparable_price',       get('input.cmp-price'));
+      fd.append('comparable_notes',       get('input.cmp-notes'));
+      fd.append('comparable_is_outlier',  out && out.checked ? 'true' : 'false');
+    });
+    if (window._comparablesFetchedAt) {
+      fd.append('comparables_fetched_at', window._comparablesFetchedAt);
+    }
     return fd;
   }
+
+  // ── Comparables (nadlan.gov.il) ───────────────────────────────────────────
+  (function () {
+    const slider     = document.getElementById('comparables_radius');
+    const sliderVal  = document.getElementById('comparables-radius-value');
+    const btn        = document.getElementById('comparables-load-btn');
+    const status     = document.getElementById('comparables-status');
+    const results    = document.getElementById('comparables-results');
+    const tbody      = document.getElementById('comparables-tbody');
+    const itmBlock   = document.getElementById('comparables-itm-fallback');
+    const itmRetry   = document.getElementById('comparables-itm-retry-btn');
+
+    slider.addEventListener('input', () => {
+      sliderVal.textContent = slider.value;
+    });
+
+    function setStatus(text, kind) {
+      status.textContent = text || '';
+      status.style.color = kind === 'error' ? '#b00020' : '';
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderDeals(deals) {
+      tbody.innerHTML = '';
+      deals.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="border:1px solid #ddd; padding:6px; text-align:center;">
+            <input type="checkbox" class="cmp-include" checked>
+          </td>
+          <td style="border:1px solid #ddd; padding:6px; text-align:center;">
+            <input type="checkbox" class="cmp-outlier">
+          </td>
+          <td style="border:1px solid #ddd; padding:6px;">
+            <input type="text" class="cmp-address" value="${escapeHtml(d.address)}" style="width:100%;">
+          </td>
+          <td style="border:1px solid #ddd; padding:6px;">
+            <input type="text" class="cmp-rooms" value="${escapeHtml(d.rooms)}" style="width:60px;">
+          </td>
+          <td style="border:1px solid #ddd; padding:6px;">
+            <input type="text" class="cmp-floor" value="${escapeHtml(d.floor)}" style="width:60px;">
+          </td>
+          <td style="border:1px solid #ddd; padding:6px;">
+            <input type="number" class="cmp-built" value="${escapeHtml(d.built_area)}" step="0.1" style="width:80px;">
+          </td>
+          <td style="border:1px solid #ddd; padding:6px;">
+            <input type="number" class="cmp-balcony" value="${d.balcony_area == null ? '' : escapeHtml(d.balcony_area)}" step="0.1" style="width:80px;" placeholder="ידני">
+          </td>
+          <td style="border:1px solid #ddd; padding:6px;">
+            <input type="number" class="cmp-price" value="${escapeHtml(d.price)}" step="1000" style="width:120px;">
+          </td>
+          <td style="border:1px solid #ddd; padding:6px;">
+            <input type="text" class="cmp-notes" value="${escapeHtml(d.notes)}" style="width:100%;">
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadComparables(opts) {
+      opts = opts || {};
+      const address = document.getElementById('address').value.trim();
+      const radius  = parseInt(slider.value, 10) || 300;
+      if (!opts.itm_x && !address) {
+        setStatus('יש להזין כתובת לפני טעינת עסקאות.', 'error');
+        return;
+      }
+      setStatus('טוען...', '');
+      btn.disabled = true;
+      itmRetry && (itmRetry.disabled = true);
+      try {
+        const body = { address, radius_m: radius };
+        if (opts.itm_x != null && opts.itm_y != null) {
+          body.itm_x = opts.itm_x;
+          body.itm_y = opts.itm_y;
+        }
+        const resp = await fetch('/shuma/comparables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (!data.success) {
+          setStatus(data.message_he || 'שגיאה בטעינת עסקאות.', 'error');
+          if (data.error_code === 'GEOCODING_FAILED') {
+            itmBlock.classList.remove('hidden');
+          }
+          results.classList.add('hidden');
+          window._comparablesFetchedAt = null;
+          return;
+        }
+        itmBlock.classList.add('hidden');
+        if (!data.deals || data.deals.length === 0) {
+          setStatus(data.message_he || 'לא נמצאו עסקאות ברדיוס שבחרת.', '');
+          results.classList.add('hidden');
+          window._comparablesFetchedAt = null;
+          return;
+        }
+        renderDeals(data.deals);
+        results.classList.remove('hidden');
+        window._comparablesFetchedAt = data.fetched_at || null;
+        setStatus(`נמצאו ${data.deals.length} עסקאות. סמן את אלה שייכנסו לדוח, השלם שטחי מרפסת אם ידועים.`, '');
+      } catch (err) {
+        setStatus('שגיאת רשת בטעינת עסקאות.', 'error');
+        results.classList.add('hidden');
+        window._comparablesFetchedAt = null;
+      } finally {
+        btn.disabled = false;
+        itmRetry && (itmRetry.disabled = false);
+      }
+    }
+
+    btn.addEventListener('click', () => loadComparables());
+    if (itmRetry) {
+      itmRetry.addEventListener('click', () => {
+        const x = parseFloat(document.getElementById('comparables_itm_x').value);
+        const y = parseFloat(document.getElementById('comparables_itm_y').value);
+        if (!isFinite(x) || !isFinite(y)) {
+          setStatus('יש להזין X ו-Y בקואורדינטות ITM.', 'error');
+          return;
+        }
+        loadComparables({ itm_x: x, itm_y: y });
+      });
+    }
+  })();
 
   // ── Submit ────────────────────────────────────────────────────────────────
   document.getElementById('form').addEventListener('submit', async function (e) {
