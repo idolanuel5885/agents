@@ -3,14 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>מערכת שמאות מקרקעין — הפקת דוח</title>
+  <title>עטר לרון — מערכת שמאות מקרקעין</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --navy-900: #0E2542;
+      --navy-800: #14304F;
+      --navy-700: #1B3D62;
+      --navy-600: #29547F;
+      --teal: #3FBFB5;
+      --teal-soft: #E6F7F5;
+      --teal-line: #5CCCC2;
+      --blue-logo: #4A7BB7;
+      --blue-logo-light: #8FB3D9;
+      --bg: #F4F6FA;
+      --card: #FFFFFF;
+      --border: #E2E7EE;
+      --border-strong: #CBD3DE;
+      --text: #1F2A3A;
+      --text-muted: #6B7585;
+      --required: #D14B4B;
+      --shadow-card: 0 1px 2px rgba(14,37,66,0.04), 0 4px 14px rgba(14,37,66,0.05);
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html, body { height: auto; }
+
     body {
-      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
-      background: #eef1f7;
-      color: #1a202c;
+      font-family: 'Assistant', 'Segoe UI', Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       direction: rtl;
       font-size: 15px;
       line-height: 1.55;
@@ -19,201 +44,632 @@
 
     /* ── Header ── */
     .page-header {
-      background: linear-gradient(135deg, #1c3557 0%, #2d5986 100%);
+      position: relative;
+      background: linear-gradient(180deg, #14304F 0%, #0E2542 100%);
       color: #fff;
-      padding: 36px 24px 30px;
-      text-align: center;
+      padding: 22px 56px 28px;
+      border-bottom: 3px solid var(--teal);
+      overflow: hidden;
     }
-    .page-header h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
-    .page-header p  { font-size: 14px; opacity: .82; margin-bottom: 10px; }
-    .header-note {
-      display: inline-flex;
+    .header-skyline {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 3px;
+      width: 100%;
+      height: 60px;
+      opacity: 0.10;
+      pointer-events: none;
+      color: var(--blue-logo);
+    }
+    .header-corner {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 130px;
+      height: 64px;
+      background: var(--teal);
+      clip-path: polygon(0 100%, 100% 100%, 0 0);
+      opacity: 0.85;
+      pointer-events: none;
+    }
+    .header-inner {
+      position: relative;
+      display: flex;
       align-items: center;
-      gap: 6px;
-      background: rgba(255,255,255,.15);
-      border-radius: 20px;
-      padding: 4px 14px;
+      justify-content: space-between;
+      gap: 24px;
+      max-width: 1240px;
+      margin: 0 auto;
+      z-index: 1;
+    }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-logo { width: 56px; height: 56px; flex-shrink: 0; }
+    .brand-text { display: flex; flex-direction: column; }
+    .brand-name {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.3px;
+      line-height: 1;
+    }
+    .brand-tagline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-size: 13px;
+      color: var(--blue-logo-light);
+      margin-top: 6px;
     }
-    .req-star-inline { color: #fca5a5; font-weight: 700; }
-
-    /* ── Layout ── */
-    .container { max-width: 880px; margin: 28px auto 60px; padding: 0 16px; }
-
-    /* ── Card ── */
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 22px 26px 26px;
-      margin-bottom: 18px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.04);
+    .brand-tagline::before {
+      content: "";
+      width: 18px;
+      height: 2px;
+      background: var(--teal);
+      display: inline-block;
     }
-    .card-header {
+
+    .hero { text-align: center; flex: 1; max-width: 540px; }
+    .hero-eyebrow {
+      font-size: 12px;
+      color: var(--teal);
+      letter-spacing: 2.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .hero-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin-top: 6px;
+      letter-spacing: -0.2px;
+    }
+    .hero-subtitle {
+      font-size: 13px;
+      color: var(--blue-logo-light);
+      margin-top: 4px;
+    }
+
+    .user-chip {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 20px;
-      padding-bottom: 13px;
-      border-bottom: 2px solid #e8edf8;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 6px 8px 6px 16px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
     }
-    .card-header h2   { font-size: 16px; font-weight: 700; color: #1c3557; }
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--teal);
+      color: var(--navy-900);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 13px;
+    }
+
+    /* ── Info banner ── */
+    .info-banner {
+      background: var(--teal-soft);
+      border-bottom: 1px solid #D5EEEB;
+      padding: 10px 56px;
+      font-size: 13px;
+      color: var(--navy-800);
+    }
+    .info-banner .req-star-inline { color: var(--required); font-weight: 700; }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 1080px;
+      margin: 28px auto 80px;
+      padding: 0 24px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow-card);
+      margin-bottom: 18px;
+      overflow: hidden;
+    }
+    .card-header {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 18px 24px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-header::after {
+      content: "";
+      position: absolute;
+      right: 24px;
+      bottom: -1px;
+      width: 36px;
+      height: 2px;
+      background: var(--teal);
+    }
+    .card-header h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--navy-900);
+      letter-spacing: -0.2px;
+    }
+    .card-body { padding: 22px 24px 24px; }
+
     .badge-opt {
-      font-size: 11.5px;
-      background: #e0f2fe;
-      color: #0369a1;
-      padding: 2px 9px;
-      border-radius: 99px;
+      font-size: 11px;
+      background: var(--teal-soft);
+      color: #1F8079;
+      padding: 3px 10px;
+      border-radius: 999px;
       font-weight: 600;
       white-space: nowrap;
+      letter-spacing: 0.2px;
     }
     .badge-cond {
-      font-size: 11.5px;
-      background: #fef9c3;
-      color: #92400e;
-      padding: 2px 9px;
-      border-radius: 99px;
+      font-size: 11px;
+      background: #FEF3C7;
+      color: #8A5A00;
+      padding: 3px 10px;
+      border-radius: 999px;
       font-weight: 600;
     }
 
     /* ── Grid ── */
-    .fg { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    .fg-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-    @media (max-width: 620px) {
+    .fg { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 22px; }
+    .fg-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 22px; }
+    @media (max-width: 760px) {
       .fg, .fg-3 { grid-template-columns: 1fr; }
+      .page-header { padding: 22px 20px 26px; }
+      .info-banner { padding: 10px 20px; }
+      .header-inner { flex-direction: column; align-items: flex-start; gap: 14px; }
+      .hero { text-align: right; }
     }
-    .full  { grid-column: 1 / -1; }
+    .full { grid-column: 1 / -1; }
 
     /* ── Field ── */
-    .f { display: flex; flex-direction: column; gap: 5px; }
-    .f label { font-size: 13.5px; font-weight: 600; color: #374151; }
-    .req-star { color: #dc2626; margin-right: 2px; }
+    .f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .f label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--navy-800);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .req-star { color: var(--required); font-weight: 700; }
 
-    .f input, .f select, .f textarea {
-      padding: 9px 12px;
-      border: 1.5px solid #d1d5db;
+    .f input,
+    .f textarea,
+    .f select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border-strong);
       border-radius: 8px;
-      font-size: 14.5px;
+      font-size: 14px;
       font-family: inherit;
       direction: rtl;
       background: #fff;
+      color: var(--text);
       transition: border-color .15s, box-shadow .15s;
-      color: #1a202c;
     }
-    .f input:focus, .f select:focus, .f textarea:focus {
+    .f textarea { resize: vertical; min-height: 76px; line-height: 1.55; }
+    .f input::placeholder, .f textarea::placeholder { color: #9CA4B2; }
+
+    .f input:focus,
+    .f textarea:focus,
+    .f select:focus {
       outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(63,191,181,0.18);
     }
-    .f.err input, .f.err select, .f.err textarea {
-      border-color: #dc2626;
-      background: #fff5f5;
+    .f.err input,
+    .f.err textarea,
+    .f.err select {
+      border-color: var(--required);
+      background: #FFF5F5;
     }
-    .f.err input:focus, .f.err select:focus {
-      box-shadow: 0 0 0 3px rgba(220,38,38,.12);
+    .f.err input:focus,
+    .f.err textarea:focus,
+    .f.err select:focus {
+      box-shadow: 0 0 0 3px rgba(209,75,75,0.18);
     }
     .err-msg {
-      font-size: 12.5px;
-      color: #dc2626;
+      font-size: 12px;
+      color: var(--required);
       display: none;
+      margin-top: 2px;
     }
     .f.err .err-msg { display: block; }
-    .hint { font-size: 12px; color: #6b7280; }
+    .hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
 
-    /* ── Checkboxes ── */
-    .cb-group { display: flex; gap: 20px; flex-wrap: wrap; padding-top: 2px; }
+    /* ── Select wrap (custom arrow) ── */
+    .select-wrap {
+      position: relative;
+      display: block;
+      width: 100%;
+    }
+    .select-wrap select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding-left: 38px;
+      background-image: none;
+      cursor: pointer;
+    }
+    .select-wrap::after {
+      content: "";
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--navy-700);
+      border-bottom: 2px solid var(--navy-700);
+      transform: translateY(-65%) rotate(45deg);
+      pointer-events: none;
+    }
+
+    /* ── Checkboxes (custom) ── */
+    .cb-group {
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap;
+      padding-top: 4px;
+    }
     .cb-item {
-      display: flex; align-items: center; gap: 7px;
-      cursor: pointer; font-size: 14.5px; font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      user-select: none;
+      position: relative;
     }
     .cb-item input[type="checkbox"] {
-      width: 17px; height: 17px; cursor: pointer; accent-color: #2563eb;
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      width: 0;
+      height: 0;
+    }
+    .cb-item .box {
+      width: 18px;
+      height: 18px;
+      border: 1.5px solid var(--border-strong);
+      border-radius: 4px;
+      background: #fff;
+      position: relative;
+      transition: background .15s, border-color .15s, box-shadow .15s;
+      flex-shrink: 0;
+      display: inline-block;
+    }
+    .cb-item input[type="checkbox"]:checked + .box {
+      background: var(--teal);
+      border-color: var(--teal);
+    }
+    .cb-item input[type="checkbox"]:checked + .box::after {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 1px;
+      width: 5px;
+      height: 10px;
+      border-right: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      transform: rotate(45deg);
+    }
+    .cb-item input[type="checkbox"]:focus + .box {
+      box-shadow: 0 0 0 3px rgba(63,191,181,0.22);
     }
 
-    /* ── Divider ── */
-    .divider { height: 1px; background: #e5e7eb; margin: 18px 0; }
-
-    /* ── Submit ── */
-    .submit-bar {
+    /* ── File drop (property images) ── */
+    .file-drop {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 12px;
-      padding: 8px 0 0;
+      gap: 16px;
+      border: 1.5px dashed var(--border-strong);
+      background: #FAFBFD;
+      border-radius: 10px;
+      padding: 18px 20px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
     }
-    .btn-gen {
+    .file-drop:hover { border-color: var(--teal-line); background: #F4FBFA; }
+    .file-drop-icon {
+      width: 44px;
+      height: 44px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0;
+    }
+    .file-drop-text { flex: 1; }
+    .file-drop-text .t1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--navy-900);
+    }
+    .file-drop-text .t2 {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .file-drop input[type="file"] {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      width: 0;
+      height: 0;
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #fff;
+      color: var(--navy-800);
+      border: 1px solid var(--border-strong);
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .btn-secondary:hover { background: #F4F6FA; border-color: var(--navy-600); }
+
+    /* ── + הוסף מסמך ── */
+    .btn-add-doc {
+      display: inline-flex;
+      align-items: center;
       gap: 10px;
-      background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+      background: #fff;
+      color: var(--teal);
+      border: 1.5px dashed var(--teal-line);
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background .15s;
+      margin-top: 6px;
+    }
+    .btn-add-doc:hover { background: var(--teal-soft); }
+    .btn-add-doc .plus-circle {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--teal);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    /* ── Plan row ── */
+    .plan-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .plan-row .plan-file-label {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text-muted);
+      min-width: 0;
+    }
+    .plan-row .plan-file-label:hover { border-color: var(--teal-line); }
+    .plan-row .plan-file-label .file-name {
+      color: var(--text);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .plan-row .plan-file { display: none; }
+    .plan-row .select-wrap { width: 220px; flex-shrink: 0; }
+    .plan-row .btn-remove {
+      width: 36px;
+      height: 36px;
+      background: #FEECEC;
+      color: var(--required);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .plan-row .btn-remove:hover { background: #FBDADA; }
+
+    /* ── Image preview ── */
+    .img-preview { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    .img-preview img {
+      width: 110px;
+      height: 84px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+    }
+    .img-preview .warn {
+      color: var(--required);
+      font-size: 13px;
+      width: 100%;
+    }
+
+    /* ── Submit area ── */
+    .submit-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 28px;
+      flex-wrap: wrap;
+    }
+    .btn-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(180deg, #1B3D62 0%, #0E2542 100%);
       color: #fff;
       border: none;
-      padding: 14px 60px;
-      font-size: 17px;
-      font-weight: 700;
+      border-bottom: 2px solid var(--teal);
+      padding: 14px 44px;
       border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: inherit;
       cursor: pointer;
-      transition: transform .12s, box-shadow .15s, background .15s;
-      box-shadow: 0 4px 14px rgba(37,99,235,.38);
-      min-width: 220px;
+      transition: transform .12s, box-shadow .15s;
+      box-shadow: 0 6px 18px rgba(14,37,66,0.25);
     }
-    .btn-gen:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 22px rgba(37,99,235,.45);
+    .btn-cta:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 22px rgba(14,37,66,0.32);
     }
-    .btn-gen:active:not(:disabled) { transform: translateY(0); }
-    .btn-gen:disabled {
-      background: #93c5fd;
+    .btn-cta:active:not(:disabled) { transform: translateY(0); }
+    .btn-cta:disabled {
+      background: var(--navy-600);
       cursor: not-allowed;
-      transform: none;
       box-shadow: none;
+      border-bottom-color: rgba(63,191,181,0.5);
     }
 
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner {
-      width: 20px; height: 20px;
-      border: 2.5px solid rgba(255,255,255,.35);
+      width: 18px; height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.35);
       border-top-color: #fff;
       border-radius: 50%;
       animation: spin .65s linear infinite;
       display: none;
     }
-    .btn-gen.loading .spinner { display: block; }
-    .btn-gen.loading .btn-icon { display: none; }
+    .btn-cta.loading .spinner { display: inline-block; }
+    .btn-cta.loading .btn-icon { display: none; }
 
-    /* ── Success toast ── */
+    /* ── Toast ── */
     #toast {
       display: none;
       align-items: center;
       gap: 8px;
-      background: #dcfce7;
-      color: #166534;
-      border: 1px solid #bbf7d0;
+      background: var(--teal-soft);
+      color: #1F8079;
+      border: 1px solid #B7E8E2;
       border-radius: 8px;
       padding: 10px 18px;
       font-size: 14px;
       font-weight: 600;
+      margin-top: 16px;
       width: 100%;
       justify-content: center;
     }
     #toast.show { display: flex; }
 
-    /* ── Section hidden ── */
     .hidden { display: none !important; }
 
-    /* ── Number inputs - keep LTR for typing ── */
     input[type="number"] { direction: ltr; text-align: right; }
     input[type="date"]   { direction: ltr; text-align: right; }
   </style>
 </head>
 <body>
 
-<div class="page-header">
-  <h1>🏢 מערכת שמאות מקרקעין</h1>
-  <p>מלא את פרטי הנכס ולחץ על "הפק דוח" לקבלת קובץ וורד מוכן להורדה</p>
-  <div class="header-note">
-    <span class="req-star-inline">*</span> שדות חובה מסומנים בכוכבית — שאר השדות אופציונליים
+<header class="page-header">
+  <svg class="header-skyline" viewBox="0 0 1200 60" preserveAspectRatio="none" aria-hidden="true">
+    <path fill="currentColor" d="M0,60 L0,40 L40,40 L40,28 L80,28 L80,44 L120,44 L120,20 L160,20 L160,38 L200,38 L200,30 L240,30 L240,46 L280,46 L280,24 L320,24 L320,40 L360,40 L360,32 L400,32 L400,18 L440,18 L440,38 L480,38 L480,28 L520,28 L520,44 L560,44 L560,22 L600,22 L600,40 L640,40 L640,30 L680,30 L680,46 L720,46 L720,26 L760,26 L760,38 L800,38 L800,20 L840,20 L840,42 L880,42 L880,30 L920,30 L920,44 L960,44 L960,24 L1000,24 L1000,38 L1040,38 L1040,28 L1080,28 L1080,42 L1120,42 L1120,32 L1160,32 L1160,40 L1200,40 L1200,60 Z"/>
+  </svg>
+  <span class="header-corner" aria-hidden="true"></span>
+
+  <div class="header-inner">
+    <div class="brand">
+      <svg class="brand-logo" viewBox="0 0 56 56" aria-hidden="true">
+        <rect x="4"  y="20" width="12" height="32" fill="#8FB3D9"/>
+        <rect x="18" y="10" width="14" height="42" fill="#6E9BCC"/>
+        <rect x="34" y="16" width="10" height="36" fill="#4A7BB7"/>
+        <rect x="21" y="14" width="3" height="3" fill="#0E2542"/>
+        <rect x="26" y="14" width="3" height="3" fill="#0E2542"/>
+        <rect x="21" y="20" width="3" height="3" fill="#0E2542"/>
+        <rect x="26" y="20" width="3" height="3" fill="#0E2542"/>
+        <rect x="21" y="26" width="3" height="3" fill="#0E2542"/>
+        <rect x="26" y="26" width="3" height="3" fill="#0E2542"/>
+        <rect x="21" y="32" width="3" height="3" fill="#0E2542"/>
+        <rect x="26" y="32" width="3" height="3" fill="#0E2542"/>
+        <rect x="21" y="38" width="3" height="3" fill="#0E2542"/>
+        <rect x="26" y="38" width="3" height="3" fill="#0E2542"/>
+        <rect x="7"  y="24" width="2" height="2" fill="#0E2542"/>
+        <rect x="11" y="24" width="2" height="2" fill="#0E2542"/>
+        <rect x="7"  y="30" width="2" height="2" fill="#0E2542"/>
+        <rect x="11" y="30" width="2" height="2" fill="#0E2542"/>
+        <rect x="7"  y="36" width="2" height="2" fill="#0E2542"/>
+        <rect x="11" y="36" width="2" height="2" fill="#0E2542"/>
+        <rect x="37" y="20" width="2" height="2" fill="#0E2542"/>
+        <rect x="41" y="20" width="2" height="2" fill="#0E2542"/>
+        <rect x="37" y="26" width="2" height="2" fill="#0E2542"/>
+        <rect x="41" y="26" width="2" height="2" fill="#0E2542"/>
+        <rect x="37" y="32" width="2" height="2" fill="#0E2542"/>
+        <rect x="41" y="32" width="2" height="2" fill="#0E2542"/>
+        <rect x="37" y="38" width="2" height="2" fill="#0E2542"/>
+        <rect x="41" y="38" width="2" height="2" fill="#0E2542"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">עטר לרון</span>
+        <span class="brand-tagline">שמאות מקרקעין וליווי פרויקטים</span>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div class="hero-eyebrow">מערכת פנימית</div>
+      <h1 class="hero-title">הפקת דו"ח שמאות מקרקעין</h1>
+      <div class="hero-subtitle">מילוי פרטי הנכס ויצירת קובץ Word מוכן להורדה</div>
+    </div>
+
+    <div class="user-chip">
+      <span>שמאי</span>
+      <span class="user-avatar">ע</span>
+    </div>
   </div>
+</header>
+
+<div class="info-banner">
+  <span class="req-star-inline">*</span>
+  שדות חובה מסומנים בכוכבית — שאר השדות אופציונליים, יש למלא ככל שהמידע זמין.
 </div>
 
 <div class="container">
@@ -222,39 +678,46 @@
   <!-- ═══════════════════════════════════════════════════════ 01 -->
   <div class="card">
     <div class="card-header"><h2>מטרת הדוח ופרטי הלקוח</h2></div>
+    <div class="card-body">
     <div class="fg">
 
       <div class="f" id="f-purpose">
         <label>מטרת חוות הדעת <span class="req-star">*</span></label>
-        <select id="purpose" name="purpose">
-          <option value="">— בחר —</option>
-          <option value="שוק">שוק — אומדן שווי שוק</option>
-          <option value="תקן_19">תקן 19 — בטוחה למתן אשראי</option>
-          <option value="פינוי_בינוי">פינוי-בינוי</option>
-        </select>
+        <div class="select-wrap">
+          <select id="purpose" name="purpose">
+            <option value="">— בחר —</option>
+            <option value="שוק">שוק — אומדן שווי שוק</option>
+            <option value="תקן_19">תקן 19 — בטוחה למתן אשראי</option>
+            <option value="פינוי_בינוי">פינוי-בינוי</option>
+          </select>
+        </div>
         <span class="err-msg">נא לבחור מטרת חוות הדעת</span>
       </div>
 
       <div class="f" id="f-rights">
         <label>סוג הזכויות <span class="req-star">*</span></label>
-        <select id="rights_type" name="rights_type">
-          <option value="">— בחר —</option>
-          <option value="בעלות_פרטית">בעלות פרטית</option>
-          <option value="חכירה_רמי">חכירה מרמ"י</option>
-          <option value="חכירה_חברה">חכירה מחברה משכנת</option>
-        </select>
+        <div class="select-wrap">
+          <select id="rights_type" name="rights_type">
+            <option value="">— בחר —</option>
+            <option value="בעלות_פרטית">בעלות פרטית</option>
+            <option value="חכירה_רמי">חכירה מרמ"י</option>
+            <option value="חכירה_חברה">חכירה מחברה משכנת</option>
+          </select>
+        </div>
         <span class="err-msg">נא לבחור סוג זכויות</span>
       </div>
 
       <div class="f" id="f-gender">
         <label>תואר הלקוח <span class="req-star">*</span></label>
-        <select id="client_gender" name="client_gender">
-          <option value="">— בחר —</option>
-          <option value="זכר">מר</option>
-          <option value="נקבה">גב'</option>
-          <option value="חברה">חברה בע"מ</option>
-          <option value="בנק">בנק</option>
-        </select>
+        <div class="select-wrap">
+          <select id="client_gender" name="client_gender">
+            <option value="">— בחר —</option>
+            <option value="זכר">מר</option>
+            <option value="נקבה">גב'</option>
+            <option value="חברה">חברה בע"מ</option>
+            <option value="בנק">בנק</option>
+          </select>
+        </div>
         <span class="err-msg">נא לבחור תואר</span>
       </div>
 
@@ -265,11 +728,13 @@
       </div>
 
     </div>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ 02 -->
   <div class="card">
     <div class="card-header"><h2>זיהוי הנכס</h2></div>
+    <div class="card-body">
     <div class="fg">
 
       <div class="f full" id="f-address">
@@ -297,11 +762,13 @@
       </div>
 
     </div>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ 03 -->
   <div class="card">
     <div class="card-header"><h2>פרטי הדירה</h2></div>
+    <div class="card-body">
     <div class="fg">
 
       <div class="f" id="f-rooms">
@@ -345,12 +812,14 @@
 
       <div class="f">
         <label>רמת גמר</label>
-        <select id="finish_level" name="finish_level">
-          <option value="">— לא צוין —</option>
-          <option value="בסיסית">בסיסית</option>
-          <option value="טובה" selected>טובה</option>
-          <option value="טובה מאוד">טובה מאוד</option>
-        </select>
+        <div class="select-wrap">
+          <select id="finish_level" name="finish_level">
+            <option value="">— לא צוין —</option>
+            <option value="בסיסית">בסיסית</option>
+            <option value="טובה" selected>טובה</option>
+            <option value="טובה מאוד">טובה מאוד</option>
+          </select>
+        </div>
       </div>
 
       <div class="f full">
@@ -358,19 +827,23 @@
         <div class="cb-group">
           <label class="cb-item">
             <input type="checkbox" id="has_parking" name="has_parking">
+            <span class="box"></span>
             <span>חניה</span>
           </label>
           <label class="cb-item">
             <input type="checkbox" id="has_storage" name="has_storage">
+            <span class="box"></span>
             <span>מחסן</span>
           </label>
           <label class="cb-item">
             <input type="checkbox" id="has_garden" name="has_garden">
+            <span class="box"></span>
             <span>גינה</span>
           </label>
         </div>
       </div>
 
+    </div>
     </div>
   </div>
 
@@ -380,6 +853,7 @@
       <h2>פרטי הבניין</h2>
       <span class="badge-opt">אופציונלי</span>
     </div>
+    <div class="card-body">
     <div class="fg-3">
 
       <div class="f">
@@ -398,6 +872,7 @@
       </div>
 
     </div>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ 05 -->
@@ -406,6 +881,7 @@
       <h2>פרטי שכירות</h2>
       <span class="badge-opt">אופציונלי</span>
     </div>
+    <div class="card-body">
     <div class="fg">
 
       <div class="f">
@@ -424,19 +900,22 @@
       </div>
 
     </div>
+    </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ NEW: תיאור הרחוב -->
+  <!-- ═══════════════════════════════════════════════════════ תיאור הרחוב -->
   <div class="card">
     <div class="card-header">
       <h2>תיאור הרחוב</h2>
       <span class="badge-opt">אופציונלי</span>
     </div>
-    <div class="f">
+    <div class="card-body">
+    <div class="f full">
       <label>תיאור הרחוב (פסקה חופשית)</label>
       <textarea id="street_description" name="street_description" rows="3"
                 placeholder="לדוגמה: רחוב הרצל הוא רחוב ראשי דו-סטרי המהווה ציר מרכזי בעיר..."></textarea>
       <span class="hint">אם לא תמולא, יופיע טקסט ברירת מחדל המתאר את הרחוב.</span>
+    </div>
     </div>
   </div>
 
@@ -446,57 +925,76 @@
       <h2>תיאור עיר ושכונה</h2>
       <span class="badge-opt">אופציונלי</span>
     </div>
-    <div class="f">
-      <label>שם השכונה</label>
-      <input type="text" id="neighborhood_name" name="neighborhood_name"
-             placeholder="לדוגמה: רמת אביב">
-      <span class="hint">נדרש כדי לאפשר השלמה אוטומטית של תיאור השכונה.</span>
+    <div class="card-body">
+    <div class="fg">
+      <div class="f full">
+        <label>שם השכונה</label>
+        <input type="text" id="neighborhood_name" name="neighborhood_name"
+               placeholder="לדוגמה: רמת אביב">
+        <span class="hint">נדרש כדי לאפשר השלמה אוטומטית של תיאור השכונה.</span>
+      </div>
+      <div class="f full">
+        <label>תיאור העיר (פסקה חופשית)</label>
+        <textarea id="city_description" name="city_description" rows="3"
+                  placeholder="ניתן להשאיר ריק — Claude ימלא תיאור איכותני אוטומטית."></textarea>
+        <span class="hint">אם השדה ריק, ייקרא Claude API להפקת תיאור איכותני (ללא נתונים כמותיים). יש לאמת את התוצאה.</span>
+      </div>
+      <div class="f full">
+        <label>תיאור השכונה (פסקה חופשית)</label>
+        <textarea id="neighborhood_description" name="neighborhood_description" rows="3"
+                  placeholder="ניתן להשאיר ריק — Claude ימלא תיאור איכותני אוטומטית."></textarea>
+        <span class="hint">דורש שם שכונה. אם השדה ריק, ייקרא Claude API להפקת תיאור איכותני.</span>
+      </div>
     </div>
-    <div class="f">
-      <label>תיאור העיר (פסקה חופשית)</label>
-      <textarea id="city_description" name="city_description" rows="3"
-                placeholder="ניתן להשאיר ריק — Claude ימלא תיאור איכותני אוטומטית."></textarea>
-      <span class="hint">אם השדה ריק, ייקרא Claude API להפקת תיאור איכותני (ללא נתונים כמותיים). יש לאמת את התוצאה.</span>
-    </div>
-    <div class="f">
-      <label>תיאור השכונה (פסקה חופשית)</label>
-      <textarea id="neighborhood_description" name="neighborhood_description" rows="3"
-                placeholder="ניתן להשאיר ריק — Claude ימלא תיאור איכותני אוטומטית."></textarea>
-      <span class="hint">דורש שם שכונה. אם השדה ריק, ייקרא Claude API להפקת תיאור איכותני.</span>
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ NEW: תמונות הנכס -->
+  <!-- ═══════════════════════════════════════════════════════ תמונות הנכס -->
   <div class="card">
     <div class="card-header">
       <h2>תמונות הנכס</h2>
       <span class="badge-opt">אופציונלי</span>
     </div>
-    <div class="f">
+    <div class="card-body">
+    <div class="f full">
       <label>העלה תמונות (עד 8)</label>
-      <input type="file" id="property_images_input" accept="image/*" multiple
-             style="padding:6px 0; border:none; box-shadow:none;">
+      <label class="file-drop" for="property_images_input">
+        <span class="file-drop-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="9" r="1.5"></circle>
+            <path d="M21 15l-5-5L5 21"></path>
+          </svg>
+        </span>
+        <span class="file-drop-text">
+          <span class="t1">גרור תמונות לכאן או לחץ לבחירה</span>
+          <span class="t2">JPG, PNG — מקסימום 8 תמונות. יוצגו בדוח בגריד 2 עמודות.</span>
+        </span>
+        <span class="btn-secondary" aria-hidden="true">בחר קבצים</span>
+        <input type="file" id="property_images_input" accept="image/*" multiple>
+      </label>
       <span class="hint">JPG, PNG — מקסימום 8 תמונות. יוצגו בדוח בגריד 2 עמודות.</span>
     </div>
-    <div id="img-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
+    <div id="img-preview" class="img-preview"></div>
+    </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ NEW: מסמכים תכנוניים -->
+  <!-- ═══════════════════════════════════════════════════════ מסמכים תכנוניים -->
   <div class="card">
     <div class="card-header">
       <h2>מסמכים תכנוניים</h2>
       <span class="badge-opt">אופציונלי</span>
     </div>
+    <div class="card-body">
     <div id="plan-rows"></div>
-    <button type="button" onclick="addPlanRow()"
-            style="margin-top:6px; padding:7px 16px; border:1.5px dashed #93c5fd;
-                   background:#eff6ff; color:#1d4ed8; border-radius:8px;
-                   font-size:14px; font-weight:600; cursor:pointer;">
-      + הוסף מסמך
+    <button type="button" class="btn-add-doc" onclick="addPlanRow()">
+      <span class="plus-circle">+</span>
+      <span>הוסף מסמך</span>
     </button>
-    <p class="hint" style="margin-top:8px;">
+    <p class="hint" style="margin-top:10px;">
       בחר לאיזה סעיף לשייך כל מסמך: סעיף 04 — רקע תכנוני / סעיף 05 — מצב משפטי
     </p>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ 06 — תקן 19 -->
@@ -505,6 +1003,7 @@
       <h2>פרטי רכישה</h2>
       <span class="badge-cond">תקן 19 בלבד</span>
     </div>
+    <div class="card-body">
     <div class="fg">
 
       <div class="f">
@@ -518,11 +1017,13 @@
       </div>
 
     </div>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ 07 -->
   <div class="card">
     <div class="card-header"><h2>שומה</h2></div>
+    <div class="card-body">
     <div class="fg">
 
       <div class="f" id="f-value">
@@ -533,6 +1034,7 @@
       </div>
 
     </div>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ 08 -->
@@ -541,21 +1043,31 @@
       <h2>הערות מיוחדות</h2>
       <span class="badge-opt">אופציונלי</span>
     </div>
-    <div class="f">
+    <div class="card-body">
+    <div class="f full">
       <textarea id="notes" name="notes" rows="5"
                 placeholder="הזן הערות נוספות שיופיעו בסוף הדוח..."></textarea>
+    </div>
     </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ SUBMIT -->
   <div class="submit-bar">
-    <button type="submit" id="gen-btn" class="btn-gen">
+    <button type="button" id="draft-btn" class="btn-secondary">שמור טיוטה</button>
+    <button type="submit" id="gen-btn" class="btn-cta">
       <span class="spinner"></span>
-      <span class="btn-icon">📄</span>
-      <span id="btn-label">הפק דוח</span>
+      <span class="btn-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="9" y1="13" x2="15" y2="13"></line>
+          <line x1="9" y1="17" x2="15" y2="17"></line>
+        </svg>
+      </span>
+      <span id="btn-label">הפק דו"ח שמאות</span>
     </button>
-    <div id="toast">✅ הדוח הופק בהצלחה — הקובץ יורד כעת</div>
   </div>
+  <div id="toast">הדוח הופק בהצלחה — הקובץ יורד כעת</div>
 
 </form>
 </div><!-- /container -->
@@ -615,21 +1127,29 @@
     const container = document.getElementById('plan-rows');
     const row = document.createElement('div');
     row.className = 'plan-row';
-    row.style.cssText = 'display:flex;gap:10px;align-items:center;margin-bottom:10px;';
     row.innerHTML = `
-      <input type="file" class="plan-file" accept="image/*"
-             style="flex:1;padding:6px 0;border:none;box-shadow:none;">
-      <select class="plan-type"
-              style="width:220px;padding:8px 10px;border:1.5px solid #d1d5db;
-                     border-radius:8px;font-size:14px;direction:rtl;">
-        <option value="04">סעיף 04 — רקע תכנוני</option>
-        <option value="05">סעיף 05 — מצב משפטי</option>
-      </select>
-      <button type="button" onclick="this.closest('.plan-row').remove()"
-              style="padding:6px 12px;background:#fee2e2;color:#dc2626;
-                     border:none;border-radius:8px;cursor:pointer;font-size:16px;font-weight:700;">✕</button>
+      <label class="plan-file-label">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+        </svg>
+        <span class="file-name">בחר קובץ...</span>
+        <input type="file" class="plan-file" accept="image/*">
+      </label>
+      <div class="select-wrap">
+        <select class="plan-type">
+          <option value="04">סעיף 04 — רקע תכנוני</option>
+          <option value="05">סעיף 05 — מצב משפטי</option>
+        </select>
+      </div>
+      <button type="button" class="btn-remove" onclick="this.closest('.plan-row').remove()" aria-label="הסר">✕</button>
     `;
     container.appendChild(row);
+
+    const fileInput = row.querySelector('.plan-file');
+    const nameSpan  = row.querySelector('.file-name');
+    fileInput.addEventListener('change', () => {
+      nameSpan.textContent = fileInput.files[0] ? fileInput.files[0].name : 'בחר קובץ...';
+    });
   }
 
   // ── Image preview ─────────────────────────────────────────────────────────
@@ -639,13 +1159,12 @@
     const files = Array.from(this.files).slice(0, 8);
     files.forEach(f => {
       const img = document.createElement('img');
-      img.style.cssText = 'width:100px;height:80px;object-fit:cover;border-radius:6px;border:1.5px solid #d1d5db;';
       img.src = URL.createObjectURL(f);
       preview.appendChild(img);
     });
     if (this.files.length > 8) {
       const warn = document.createElement('p');
-      warn.style.cssText = 'color:#dc2626;font-size:13px;margin-top:4px;width:100%;';
+      warn.className = 'warn';
       warn.textContent = 'נבחרו יותר מ-8 תמונות — רק 8 הראשונות ייכללו בדוח.';
       preview.appendChild(warn);
     }
@@ -722,8 +1241,13 @@
     } finally {
       btn.disabled = false;
       btn.classList.remove('loading');
-      label.textContent = 'הפק דוח';
+      label.textContent = 'הפק דו"ח שמאות';
     }
+  });
+
+  // ── Draft button (placeholder — feature not yet wired) ────────────────────
+  document.getElementById('draft-btn').addEventListener('click', function () {
+    alert('שמירת טיוטה תהיה זמינה בקרוב.');
   });
 </script>
 </body>
