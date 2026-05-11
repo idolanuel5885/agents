@@ -532,103 +532,94 @@ plans into structured input is a follow-up).
 | Nominatim (OSM) | `https://nominatim.openstreetmap.org/search` | Hebrew address → (lat, lon) | No key; requires descriptive `User-Agent`; 1 req/sec policy |
 | Iplan Xplan ArcGIS | `https://ags.iplan.gov.il/arcgis/rest/services/PlanningPublic/Xplan/MapServer` | Parcel polygon, land-use, plans, neighbouring parcels | Public; no key. Layer IDs discovered at runtime by name hints (parcel / designation / plan) |
 | Anthropic API | `https://api.anthropic.com` (via SDK) | City / neighbourhood descriptions | Requires `ANTHROPIC_API_KEY` (B.11) |
-| nadlan.gov.il | `https://www.nadlan.gov.il/Nadlan.REST/Main/GetAssestAndDeals` | Recent transactions in radius | Public, no key. Endpoint shape unconfirmed live in sandbox — see B.14 |
+| Govmap | `https://www.govmap.gov.il/api/search-service/autocomplete`, `https://www.govmap.gov.il/api/real-estate/street-deals/{polygon_id}` | Hebrew address autocomplete + street-level recent deals | Public, no key. Returns Web-Mercator (EPSG:3857) coordinates inline. See B.14 |
+| nadlan.gov.il deal-info | `https://api.nadlan.gov.il/deal-info` | `addr_id` → street `polygon_id` | Public, no key. Plain JSON `{base_name, base_id}` payload |
 
-### B.14 Nadlan comparables module (auto-fill comparison transactions)
+### B.14 Govmap deals integration
 
-`real_estate/nadlan_client.py` exposes two public functions —
-`address_to_itm(address)` and
-`fetch_recent_deals(itm_x, itm_y, radius_m, address_label="", max_results=10)`
-— that pull recent real-estate transactions from the public
-`nadlan.gov.il` "Nadlan.REST" endpoint and map them to
-`ComparisonProperty` rows for the report's section 6 table.
+`real_estate/govmap_client.py` exposes three public functions —
+`autocomplete_address(query)`, `get_polygon_id_for_address(addr_id)`,
+and `get_street_deals(polygon_id, limit=10)` — plus a
+`GovmapFetchError` carrying a Hebrew `message_he` for user-facing
+display. Replaces the previous `nadlan_client.py`, which targeted the
+deprecated `nadlan.gov.il/Nadlan.REST/...` endpoint that has since been
+removed and now returns the SPA `index.html` from CloudFront. See
+`nadlan_integration_report.md` Iteration 3 for the discovery trail (PoC
+tests 1–9) and a reference to the upstream
+[`nitzpo/nadlan-mcp`](https://github.com/nitzpo/nadlan-mcp) project that
+documents the same endpoints.
 
 **Pipeline.**
 
-1. Geocode the Hebrew address via Nominatim (re-uses
-   `parcel_lookup.geocode`).
-2. Project WGS84 → ITM (EPSG:2039) (re-uses `parcel_lookup.to_itm`).
-3. POST the documented payload to
-   `https://www.nadlan.gov.il/Nadlan.REST/Main/GetAssestAndDeals` with
-   `Distance=radius_m`, `OrderByFilled=DEALDATETIME`,
-   `OrderByDescending=true`.
-4. Map each row to `ComparisonProperty`. Field mapping:
-   `FULLADRESS → address`, `ASSETROOMNUM → rooms`, `FLOORNO → floor`,
-   `DEALNATURE → built_area`, `DEALAMOUNT → price`,
-   `DEALDATETIME / BUILDINGYEAR / NEWPROJECTTEXT` → `notes`.
-   `balcony_area` is intentionally left as `None` because the API
-   does not expose a balcony figure — the appraiser fills it manually
-   per A.3 ("no fabricated data").
+1. Autocomplete: `POST https://www.govmap.gov.il/api/search-service/autocomplete`
+   with `{searchText, language:"he", isAccurate:false, maxResults:10}`.
+   Each result carries an `id` field like
+   `address|ADDRESS|64834989|רוטשילד 1|תל אביב`; pipe-segment 3 is the
+   `addr_id` we carry forward. `shape` is `POINT(x y)` in Web-Mercator
+   (EPSG:3857). Only `type=="address"` rows have a usable `addr_id`;
+   `street` and `poi` rows are discarded by the UI.
+2. Polygon lookup: `POST https://api.nadlan.gov.il/deal-info` with
+   `{"base_name": "addr_id", "base_id": "<addr_id>"}`. Returns
+   `polygon_id` (the id of the street polygon the address sits on);
+   tried under several common keys for forward-compat with payload
+   shape drift.
+3. Street deals: `GET https://www.govmap.gov.il/api/real-estate/street-deals/{polygon_id}`.
+   Returns the historical deal list. Sort by `dealDate` desc and take
+   the top `limit`. Field mapping to `ComparisonProperty`:
+   `streetNameHeb + " " + houseNum → address`, `assetRoomNum → rooms`,
+   `floorNo → floor` (Hebrew word → digit when known), `assetArea →
+   built_area`, `dealAmount → price`, `dealDate (ISO) → notes` formatted
+   `D.M.YYYY` (Israeli convention, not zero-padded). `balcony_area`
+   stays `None` — Govmap does not expose a balcony figure (A.3).
 
 **Wiring.**
 
-- New endpoint `POST /shuma/comparables` (`real_estate/web.py`).
-  Accepts JSON `{address, radius_m, itm_x?, itm_y?}`. Never returns
-  HTTP 5xx — failure paths emit HTTP 200 with `success=false` plus
-  a Hebrew `message_he` and an `error_code` of either
-  `GEOCODING_FAILED` or `NADLAN_UNAVAILABLE`. Empty results return
-  `success=true, deals=[]` with a "increase the radius" message.
-- New form card "עסקאות השוואה" between section 07 and 08 in
-  `shuma.html`. Slider for radius (100-1000 m, default 300), "טען
-  עסקאות השוואה" button, dynamic table with checkboxes (include /
-  outlier) and editable cells. Manual ITM fallback fields appear only
-  after a `GEOCODING_FAILED` response.
-- `POST /shuma/generate` accepts new `comparable_address[]`,
-  `comparable_rooms[]`, `comparable_floor[]`, `comparable_built_area[]`,
-  `comparable_balcony_area[]`, `comparable_price[]`, `comparable_notes[]`,
-  `comparable_is_outlier[]`, `comparables_fetched_at` form fields.
-  Helper `_build_comparables(...)` zips them into a list of
-  `ComparisonProperty` and stores it on `PropertyInput.comparison_properties`.
+- `POST /shuma/autocomplete` accepts `{query}`, returns
+  `{success, results | error_code, message_he}`. Always HTTP 200.
+- `POST /shuma/comparables` accepts `{addr_id, limit}`. Internally
+  calls steps 2 then 3, then serialises. Error codes:
+  `POLYGON_LOOKUP_FAILED` (step 2 failed or returned no polygon) and
+  `DEALS_FETCH_FAILED` (step 3 failed). Empty street is `success=true,
+  error_code=NO_DEALS_FOUND, deals=[]` (per A.8 — not an error). Always
+  HTTP 200.
+- Comparables form card in `shuma.html`: a single autocomplete text
+  field that calls `/shuma/autocomplete` on every keystroke (300 ms
+  debounce, ≥2 chars). The dropdown filters to `type==address` rows
+  only; if none, a Hebrew hint guides the appraiser to add a house
+  number. "טען עסקאות" remains disabled until a row is picked; the
+  selection stores `addr_id` and `display_name` in hidden inputs.
+  Clicking the button calls `/shuma/comparables` with the `addr_id`.
+- `POST /shuma/generate` accepts the same `comparable_*[]` and
+  `comparables_fetched_at` form fields as before — the helper
+  `_build_comparables(...)` is unchanged. Only the UI that produces
+  them and the way they are sourced changed.
 
-**Model changes.**
+**Model changes.** None. `ComparisonProperty.is_outlier` (bool),
+`ComparisonProperty.balcony_area` (`Optional[float]`), and
+`PropertyInput.comparables_fetched_at` (`Optional[str]`) are unchanged
+from the previous iteration.
 
-- `ComparisonProperty.balcony_area` is now `Optional[float]` and
-  `is_outlier: bool = False` was added.
-  `ComparisonProperty.equiv_area` treats `None` and `<= 0` identically
-  (no balcony component).
-- `PropertyInput.comparables_fetched_at: Optional[str] = None` records
-  the date when comparables were fetched from `nadlan.gov.il`. The
-  source-attribution footnote on the comparison table is rendered only
-  when this field is non-empty.
+**Report changes.** None. `_section_06_valuation` keeps the outlier
+marker, balcony-column hiding, balcony-coefficient footnote, and
+source-provenance footnote. The provenance footnote now reads
+`govmap.gov.il / nadlan.gov.il` instead of `נדל"ן.gov.il`.
 
-**Report changes (`_section_06_valuation`).**
+**Geocoding / projection helpers no longer used by comparables.**
+`autocomplete_address` returns Web-Mercator coordinates inline and
+`get_polygon_id_for_address` consumes the `addr_id`, so the
+Nominatim → WGS84 → ITM pipeline is bypassed entirely on the
+comparables path. The helpers `geocode()` / `to_itm()` in
+`parcel_lookup.py` are kept because the parcel-lookup feature still
+uses them internally, but their public re-exports for the deprecated
+`nadlan_client` are deprecated (kept for future callers; marked in
+the module docstring).
 
-- Outlier rows are prefixed with `(*)` in the row-number column. When
-  any row is marked `is_outlier=True` the outlier footnote is rendered
-  below the table.
-- The balcony / equivalent-area columns are *hidden* when fewer than
-  half of the included rows have a balcony figure (per A.3 — better to
-  drop the columns than to render misleading "—" placeholders).
-- A new balcony-coefficient footnote is rendered when the columns are
-  shown and at least one row has a balcony.
-- A source-provenance footnote
-  (`הנתונים הינם כפי שמפורסם בנדל"ן.gov.il, נמשך {date}.`) is
-  rendered iff `comparables_fetched_at` is set.
-
-**Snippets** (in `skills/06_valuation.md`):
-
-- `section_06.comparison.footnote.outlier` (fixed)
-- `section_06.comparison.footnote.balcony_coef` (fixed)
-- `section_06.comparison.footnote.source` (semi)
-
-**Geocoding helpers re-used.** Per the system owner's preference and
-to avoid the same drift problem documented in C.5, the helpers in
-`parcel_lookup.py` were re-exported as public `geocode(address)` /
-`to_itm(lat, lon)` and imported by `nadlan_client.py`. No standalone
-`geocoding.py` module was introduced.
-
-**Live endpoint not verified in sandbox.** The published endpoint
-returns the SPA `index.html` from CloudFront on every request from
-the development sandbox (see `nadlan_integration_report.md` for the
-full diagnostic and a manual `curl` command). The integration code
-is built strictly to the documented request/response shape; manual
-verification against the production environment is required, and
-the current state is captured in C.12.
-
-**Tests.** `tests/test_nadlan_integration.py` covers all the failure
-paths the Web layer relies on plus an end-to-end check that the report
-hides balcony columns and emits the outlier marker. The live probe
-`test_live_endpoint_smoke` is `pytest.mark.skip`-d.
+**Tests.** `tests/test_govmap_integration.py` covers all three client
+functions (happy path, failure paths, sort+limit, Hebrew floor parsing)
+and both Web endpoints (success, failure-with-error-code, empty-result
+flow). The end-to-end "outlier marker + balcony columns hidden" report
+test is kept from the previous suite. `test_live_endpoint_smoke` is
+`pytest.mark.skip`-d.
 
 ---
 
@@ -659,8 +650,8 @@ from the UI — see C.10. So Web reports still render placeholders for
 all of those today.
 
 The comparables gap is *closed* by B.14: the new
-"עסקאות השוואה" card lets the appraiser pull 10 recent transactions
-from `nadlan.gov.il` and select which ones enter the report. Manual
+"עסקאות השוואה" card lets the appraiser pick a Govmap-suggested
+address and pull the most recent street-level deals from Govmap. Manual
 entry is still possible by editing the auto-loaded rows.
 
 ### C.10 Parcel-lookup feature hidden — boundaries / land-use / plans still manual
@@ -730,24 +721,25 @@ for the unlucky code path).
 
 Resolved as part of this commit — references removed from `skills/00_index.md`. The system's approved data sources are: nadlan.gov.il, govmap, Google Maps, Tabu, CBS. yad2 and madlan are not approved.
 
-### C.12 Nadlan endpoint not verified live in development sandbox
+### C.13 Govmap deals carry no `balcony_area`; Hebrew floor words don't all map
 
-The Nadlan client (B.14) targets
-`https://www.nadlan.gov.il/Nadlan.REST/Main/GetAssestAndDeals`. From
-the development sandbox the URL returns the SPA `index.html`
-(`text/html`, served from S3+CloudFront with
-`x-cache: Error from cloudfront`) for every path under
-`/Nadlan.REST/`. This may indicate (a) a CDN routing change, (b) the
-endpoint moved to a different host, or (c) the public path now requires
-a session/cookie obtained from the SPA bootstrap. Either way it
-prevents an end-to-end live test from CI.
+Two known limitations of the new comparables source (B.14):
 
-The integration code is built strictly to the documented payload and
-response shape. **Manual verification on Railway after deploy is
-required** — `nadlan_integration_report.md` contains the curl command
-and the exact field mappings to confirm. If the live shape differs,
-update `_to_comparison_property` in `real_estate/nadlan_client.py`
-accordingly.
+1. Govmap's `street-deals` payload has no balcony figure. Every fetched
+   deal stores `balcony_area=None`, and the appraiser must fill it
+   manually if they want the equivalent-area column to render. The
+   report's existing "hide balcony columns when < half are populated"
+   rule means that for fresh auto-loads (where every row is `None`)
+   the column is hidden — which is the intended A.3 behaviour but means
+   the appraiser has to remember to enter balconies if comparable-area
+   accuracy matters.
+2. `floorNo` comes back as a Hebrew ordinal (`"אחת עשרה"`, `"שתיים
+   עשרה"`, etc.). We translate floors 0–20 via a static dictionary; any
+   floor word outside that set renders as `""` and the appraiser fills
+   it manually. We never invent a number (A.3).
+
+Closing either gap requires an additional data source (Tabu extract,
+manual measurement) and is out of scope for the open-data integration.
 
 ---
 

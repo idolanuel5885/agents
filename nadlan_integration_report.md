@@ -142,3 +142,97 @@ a message pointing back to this file.
 - **CLI parity.** `real_estate/form.py` (CLI) still has its own
   comparison-property prompts; it has not been updated to use the new
   Nadlan client. Per the brief this was explicitly out of scope.
+
+---
+
+# Iteration 3 — Final solution via Govmap (2026-05)
+
+## What changed
+
+The Iteration 1/2 work above is now **superseded**. The
+`Nadlan.REST` endpoint at
+`https://www.nadlan.gov.il/Nadlan.REST/Main/GetAssestAndDeals` was
+removed by the Ministry of Justice some time before April 2026 and
+now returns the SPA `index.html` for every request (the same
+behaviour we'd seen from the sandbox). `nadlan_client.py` has been
+deleted along with the matching test file.
+
+The replacement is `real_estate/govmap_client.py`, which speaks to
+three different endpoints — two on Govmap, one on a new
+`api.nadlan.gov.il` host — discovered by combing the production
+nadlan.gov.il site's Network tab and cross-referencing the
+[`nitzpo/nadlan-mcp`](https://github.com/nitzpo/nadlan-mcp) open-source
+MCP server.
+
+## Discovery trail
+
+PoC iterations under `/shuma/poc-test` (see git history; the script
+itself has since been removed):
+
+| # | Endpoint | Result |
+|---|---|---|
+| 1 | `POST /api/search-service/autocomplete` (govmap) | **200 JSON** — autocomplete works server-side, returns `id`, `text`, `shape: "POINT(x y)"` (Web-Mercator). |
+| 2 | `GET /api/pages/settlement/buy/{id}.json` (data.nadlan) | 200 — settlement-level metadata only, no per-property deals. |
+| 3 | `GET /api/layers-catalog/apps/parcel-search/...` (govmap) | Inconclusive; out of scope. |
+| 4 | `GET /api/pages/neighborhood/buy/{id}.json` (data.nadlan) | 200 — neighbourhood metadata, no per-property deals either. |
+| 5 | `/api/pages/street/buy/*`, `/api/pages/streets/buy/*` (data.nadlan, guesses) | 403/404 across the board. |
+| 6 | `/api/pages/polygon/buy/*`, `/api/pages/address/buy/*`, … | 403/404. |
+| 7 | `GET /api/real-estate/deals/(x y)/{radius}` (govmap) | 200 JSON. Works. |
+| 8 | `GET /api/real-estate/street-deals/{polygon_id}` (govmap) | **200 JSON, 353 deals for Rothschild** — this is the chosen endpoint. |
+| 9 | `POST /api/layers-catalog/entitiesByPoint` (govmap) | Speculative payload; not used. |
+
+Tests 7 and 8 both returned real deal data from Railway; test 8 was
+picked because its scope (street polygon) matches the appraiser's
+actual question ("comparables on this street") better than a fixed
+radius.
+
+The missing step — `addr_id` (from autocomplete) → `polygon_id`
+(needed by street-deals) — turned out to be the `api.nadlan.gov.il/deal-info`
+endpoint that `nitzpo/nadlan-mcp` documents. A simple
+`POST {"base_name": "addr_id", "base_id": "<id>"}` returns the
+`polygon_id` for the address.
+
+## Endpoints used today
+
+| Step | Method | URL | Body / params |
+|---|---|---|---|
+| 1. Autocomplete | POST | `https://www.govmap.gov.il/api/search-service/autocomplete` | `{"searchText": q, "language": "he", "isAccurate": false, "maxResults": 10}` |
+| 2. Polygon lookup | POST | `https://api.nadlan.gov.il/deal-info` | `{"base_name": "addr_id", "base_id": "<addr_id>"}` |
+| 3. Street deals | GET | `https://www.govmap.gov.il/api/real-estate/street-deals/{polygon_id}` | — |
+
+All three carry `Origin`/`Referer` set to the site they belong to and
+a descriptive `User-Agent`. No auth, no key, no quota observed in
+testing — but the appraiser only triggers steps 2/3 once per report,
+so we are unlikely to be rate-limited even under heavy use.
+
+## Manual verification commands
+
+```bash
+# 1. Autocomplete — confirm a single search returns address rows.
+curl -s -X POST 'https://www.govmap.gov.il/api/search-service/autocomplete' \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: https://www.govmap.gov.il' \
+  -H 'Referer: https://www.govmap.gov.il/' \
+  -d '{"searchText":"רוטשילד תל אביב","language":"he","isAccurate":false,"maxResults":10}' \
+  | python -m json.tool | head -40
+
+# 2. Polygon lookup — pick an addr_id from above (segment 3 of the
+#    pipe-delimited `id` field on a `type:"address"` row).
+curl -s -X POST 'https://api.nadlan.gov.il/deal-info' \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: https://www.nadlan.gov.il' \
+  -H 'Referer: https://www.nadlan.gov.il/' \
+  -d '{"base_name":"addr_id","base_id":"64834989"}'
+
+# 3. Street deals — feed the polygon_id from step 2.
+curl -s 'https://www.govmap.gov.il/api/real-estate/street-deals/53292326' \
+  -H 'Accept: application/json' \
+  -H 'Origin: https://www.govmap.gov.il' \
+  -H 'Referer: https://www.govmap.gov.il/' \
+  | python -m json.tool | head -40
+```
+
+If the live response shape on the production environment differs
+from the one assumed by `govmap_client._to_comparison_property` or
+`govmap_client._extract_polygon_id`, update those helpers — they are
+the only two places the wire-format is interpreted.
