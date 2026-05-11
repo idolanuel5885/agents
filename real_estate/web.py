@@ -107,6 +107,19 @@ async def lookup_parcel_endpoint(address: str = Form(...)):
     return result.to_dict()
 
 
+# ── PoC endpoint (temporary, follow-up iteration) ────────────────────────────
+# Probes Govmap's deals-by-radius endpoint to see whether it returns
+# the polygon list nitzpo/nadlan-mcp documents, and whether feeding
+# those polygon ids back into street-deals yields recent area-wide
+# deals. To be removed once the answer is in.
+
+
+@router.get("/poc-test", response_class=Response)
+async def poc_test_endpoint():
+    from tests.poc_new_endpoints import run_poc
+    return Response(content=run_poc(), media_type="text/plain; charset=utf-8")
+
+
 # ── Address autocomplete + comparable transactions endpoints ─────────────────
 
 
