@@ -532,94 +532,104 @@ plans into structured input is a follow-up).
 | Nominatim (OSM) | `https://nominatim.openstreetmap.org/search` | Hebrew address → (lat, lon) | No key; requires descriptive `User-Agent`; 1 req/sec policy |
 | Iplan Xplan ArcGIS | `https://ags.iplan.gov.il/arcgis/rest/services/PlanningPublic/Xplan/MapServer` | Parcel polygon, land-use, plans, neighbouring parcels | Public; no key. Layer IDs discovered at runtime by name hints (parcel / designation / plan) |
 | Anthropic API | `https://api.anthropic.com` (via SDK) | City / neighbourhood descriptions | Requires `ANTHROPIC_API_KEY` (B.11) |
-| Govmap | `https://www.govmap.gov.il/api/search-service/autocomplete`, `https://www.govmap.gov.il/api/real-estate/street-deals/{polygon_id}` | Hebrew address autocomplete + street-level recent deals | Public, no key. Returns Web-Mercator (EPSG:3857) coordinates inline. See B.14 |
-| nadlan.gov.il deal-info | `https://api.nadlan.gov.il/deal-info` | `addr_id` → street `polygon_id` | Public, no key. Plain JSON `{base_name, base_id}` payload |
+| Govmap | `https://www.govmap.gov.il/api/search-service/autocomplete`, `https://www.govmap.gov.il/api/real-estate/deals/{x},{y}/{radius}`, `https://www.govmap.gov.il/api/real-estate/street-deals/{polygon_id}` | Hebrew address autocomplete + radius-scoped polygon discovery + per-polygon deals | Public, no key. Web-Mercator EPSG:3857 coords. Minimal headers (`Content-Type` + `User-Agent` only). See B.14 |
 
-### B.14 Govmap deals integration
+### B.14 Govmap deals integration (radius-based pipeline)
 
-`real_estate/govmap_client.py` exposes three public functions —
-`autocomplete_address(query)`, `get_polygon_id_for_address(addr_id)`,
-and `get_street_deals(polygon_id, limit=10)` — plus a
-`GovmapFetchError` carrying a Hebrew `message_he` for user-facing
-display. Replaces the previous `nadlan_client.py`, which targeted the
-deprecated `nadlan.gov.il/Nadlan.REST/...` endpoint that has since been
-removed and now returns the SPA `index.html` from CloudFront. See
-`nadlan_integration_report.md` Iteration 3 for the discovery trail (PoC
-tests 1–9) and a reference to the upstream
-[`nitzpo/nadlan-mcp`](https://github.com/nitzpo/nadlan-mcp) project that
-documents the same endpoints.
+`real_estate/govmap_client.py` exposes two public functions —
+`autocomplete_address(query)` and
+`find_comparable_deals(point_x, point_y, radius_m=200, max_deals=10)`
+— plus `GovmapFetchError` (Hebrew `message_he`). Built on the call
+shape documented by [`nitzpo/nadlan-mcp`](https://github.com/nitzpo/nadlan-mcp)
+(MIT-licensed). Discovery trail in `nadlan_integration_report.md`
+Iteration 4.
 
-**Pipeline.**
+**Pipeline.** Replaces the earlier `deal-info → street-deals` chain
+that returned single-building results because `deal-info`'s
+`polygon_id` is parcel-level (gush-parcel, e.g. `"7422-116"`).
 
-1. Autocomplete: `POST https://www.govmap.gov.il/api/search-service/autocomplete`
+1. **Autocomplete.** `POST /api/search-service/autocomplete`
    with `{searchText, language:"he", isAccurate:false, maxResults:10}`.
-   Each result carries an `id` field like
-   `address|ADDRESS|64834989|רוטשילד 1|תל אביב`; pipe-segment 3 is the
-   `addr_id` we carry forward. `shape` is `POINT(x y)` in Web-Mercator
-   (EPSG:3857). Only `type=="address"` rows have a usable `addr_id`;
-   `street` and `poi` rows are discarded by the UI.
-2. Polygon lookup: `POST https://api.nadlan.gov.il/deal-info` with
-   `{"base_name": "addr_id", "base_id": "<addr_id>"}`. Returns
-   `polygon_id` (the id of the street polygon the address sits on);
-   tried under several common keys for forward-compat with payload
-   shape drift.
-3. Street deals: `GET https://www.govmap.gov.il/api/real-estate/street-deals/{polygon_id}`.
-   Returns the historical deal list. Sort by `dealDate` desc and take
-   the top `limit`. Field mapping to `ComparisonProperty`:
-   `streetNameHeb + " " + houseNum → address`, `assetRoomNum → rooms`,
-   `floorNo → floor` (Hebrew word → digit when known), `assetArea →
-   built_area`, `dealAmount → price`, `dealDate (ISO) → notes` formatted
-   `D.M.YYYY` (Israeli convention, not zero-padded). `balcony_area`
-   stays `None` — Govmap does not expose a balcony figure (A.3).
+   Each result carries `shape: "POINT(x y)"` in Web-Mercator (EPSG:3857).
+   Address rows additionally carry an `id` whose pipe-segment 3 is the
+   legacy `addr_id` (still parsed for forward-compat; not used by the
+   new pipeline).
+2. **Deals by radius.** `GET /api/real-estate/deals/{x},{y}/{radius}`
+   returns a list of polygon metadata (NOT deals). Each polygon has
+   `polygon_id`, `dealscount`, and — crucially — `streetNameHeb` /
+   `houseNum`. We sort by `dealscount` desc and keep the top
+   `_MAX_POLYGONS` (10) to bound the next step's HTTP cost.
+3. **Per-polygon deals.** For each kept polygon,
+   `GET /api/real-estate/street-deals/{polygon_id}` returns
+   `{totalCount, data, limit, offset}`. The `data` rows are the actual
+   transactions. **Note:** the per-deal payload has
+   `streetNameHeb=null` and `houseNum=null` when the polygon is in
+   gush-parcel form (Test 13b confirmed this) — we therefore enrich
+   each deal's address from the polygon metadata of step 2.
+4. **Filter + sort.** Keep only `propertyTypeDescription == "דירה"`
+   (apartments — stores / plots / buildings drop out per A.3). Sort
+   by `dealDate` desc, take top `max_deals` across all polygons.
+
+Polygon-level failures are swallowed silently — one flaky polygon
+shouldn't blank the table (partial success). Only the radius query
+itself (step 2) raises `POLYGONS_FETCH_FAILED` on failure.
+
+Field mapping to `ComparisonProperty`:
+`{polygon.streetNameHeb} {polygon.houseNum} → address`,
+`assetRoomNum → rooms`, `floorNo → floor` (Hebrew word → digit via
+`_HE_FLOOR_TO_INT` for 0–20; unknown words render as `""` so the
+appraiser fills them — never fabricated), `assetArea → built_area`,
+`dealAmount → price`, `dealDate (ISO) → notes` as `D.M.YYYY`.
+`balcony_area` stays `None` (Govmap doesn't expose it).
+
+Inter-call delay: `time.sleep(0.2)` between sequential street-deals
+calls (up to 10 per request) so we don't burst on Govmap.
+
+**Headers.** Minimal — `Content-Type: application/json` and
+`User-Agent: NadlanMCP/1.0.0`. No `Origin`, `Referer`, or `Accept`
+(Test 12 confirmed these aren't needed and the previous client's
+inclusion of them may have triggered different CDN routing in some
+environments).
 
 **Wiring.**
 
 - `POST /shuma/autocomplete` accepts `{query}`, returns
   `{success, results | error_code, message_he}`. Always HTTP 200.
-- `POST /shuma/comparables` accepts `{addr_id, limit}`. Internally
-  calls steps 2 then 3, then serialises. Error codes:
-  `POLYGON_LOOKUP_FAILED` (step 2 failed or returned no polygon) and
-  `DEALS_FETCH_FAILED` (step 3 failed). Empty street is `success=true,
-  error_code=NO_DEALS_FOUND, deals=[]` (per A.8 — not an error). Always
+- `POST /shuma/comparables` accepts `{itm_x, itm_y, radius_m, max_deals}`.
+  Radius clamped to 50–1000 m server-side; `max_deals` clamped 1–50.
+  Error codes: `POLYGONS_FETCH_FAILED` (radius query failed). Empty
+  result is `success=true, error_code=NO_DEALS_FOUND, deals=[]`. Always
   HTTP 200.
-- Comparables form card in `shuma.html`: a single autocomplete text
-  field that calls `/shuma/autocomplete` on every keystroke (300 ms
-  debounce, ≥2 chars). The dropdown filters to `type==address` rows
-  only; if none, a Hebrew hint guides the appraiser to add a house
-  number. "טען עסקאות" remains disabled until a row is picked; the
-  selection stores `addr_id` and `display_name` in hidden inputs.
-  Clicking the button calls `/shuma/comparables` with the `addr_id`.
-- `POST /shuma/generate` accepts the same `comparable_*[]` and
-  `comparables_fetched_at` form fields as before — the helper
-  `_build_comparables(...)` is unchanged. Only the UI that produces
-  them and the way they are sourced changed.
+- Comparables form card in `shuma.html`: autocomplete text field
+  (300 ms debounce, ≥2 chars, `type==address` rows only) + a radius
+  slider (50–500 m, default 200). Selecting a row stores `itm_x` /
+  `itm_y` / `display_name` in hidden inputs and enables the
+  "טען עסקאות" button. Click calls `/shuma/comparables`.
+- `POST /shuma/generate` — unchanged. The `comparable_*[]` form
+  fields and `comparables_fetched_at` are still serialised the same
+  way; only the UI that fills them and the upstream source changed.
 
-**Model changes.** None. `ComparisonProperty.is_outlier` (bool),
-`ComparisonProperty.balcony_area` (`Optional[float]`), and
-`PropertyInput.comparables_fetched_at` (`Optional[str]`) are unchanged
-from the previous iteration.
-
-**Report changes.** None. `_section_06_valuation` keeps the outlier
-marker, balcony-column hiding, balcony-coefficient footnote, and
-source-provenance footnote. The provenance footnote now reads
-`govmap.gov.il / nadlan.gov.il` instead of `נדל"ן.gov.il`.
+**Model + report changes.** None. `ComparisonProperty.is_outlier`,
+`ComparisonProperty.balcony_area`, and
+`PropertyInput.comparables_fetched_at` are unchanged.
+`_section_06_valuation` still renders the outlier marker, hides
+balcony columns when sparse, and emits the source-provenance footnote
+(now `govmap.gov.il`).
 
 **Geocoding / projection helpers no longer used by comparables.**
-`autocomplete_address` returns Web-Mercator coordinates inline and
-`get_polygon_id_for_address` consumes the `addr_id`, so the
-Nominatim → WGS84 → ITM pipeline is bypassed entirely on the
-comparables path. The helpers `geocode()` / `to_itm()` in
-`parcel_lookup.py` are kept because the parcel-lookup feature still
-uses them internally, but their public re-exports for the deprecated
-`nadlan_client` are deprecated (kept for future callers; marked in
-the module docstring).
+The new pipeline takes Web-Mercator coords directly from autocomplete
+— Nominatim and WGS84 → ITM are bypassed entirely on this path.
+`parcel_lookup.geocode()` / `to_itm()` are kept because the
+parcel-lookup feature still uses them internally; their public
+re-exports are marked deprecated in the module docstring.
 
-**Tests.** `tests/test_govmap_integration.py` covers all three client
-functions (happy path, failure paths, sort+limit, Hebrew floor parsing)
-and both Web endpoints (success, failure-with-error-code, empty-result
-flow). The end-to-end "outlier marker + balcony columns hidden" report
-test is kept from the previous suite. `test_live_endpoint_smoke` is
-`pytest.mark.skip`-d.
+**Tests.** `tests/test_govmap_integration.py` covers autocomplete
+(parse / filter / fail), `find_comparable_deals` (full pipeline with
+polygon-level enrichment, apartment filter, sort+limit, partial
+success on polygon failure, empty radius, `_MAX_POLYGONS` cap,
+neighborhood fallback when street is also null), the two Web endpoints,
+and the end-to-end report rendering check. `test_live_endpoint_smoke`
+is `pytest.mark.skip`-d — run manually after deploy.
 
 ---
 

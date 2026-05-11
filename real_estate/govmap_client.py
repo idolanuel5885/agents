@@ -1,31 +1,39 @@
-"""HTTP client for Govmap and nadlan deal-info APIs.
+"""HTTP client for Govmap address-autocomplete + deals-by-radius.
 
-Three public functions wrap the chain used to pull comparable
-transactions from the Israeli government's public real-estate services:
+Two public functions plus a Hebrew-aware exception:
 
-* :func:`autocomplete_address` — Hebrew text → list of candidate
-  addresses, each with an ``addr_id`` we can carry forward. Uses
-  Govmap's ``search-service/autocomplete`` endpoint.
-* :func:`get_polygon_id_for_address` — ``addr_id`` → street polygon id
-  via ``api.nadlan.gov.il/deal-info``.
-* :func:`get_street_deals` — polygon id → list of recent
-  :class:`real_estate.models.ComparisonProperty`. Uses Govmap's
-  ``real-estate/street-deals`` endpoint.
+* :func:`autocomplete_address` — Hebrew text → list of address
+  candidates (each with ITM Web-Mercator coords). Uses Govmap's
+  ``search-service/autocomplete``.
+* :func:`find_comparable_deals` — ITM coords → up to ``max_deals``
+  apartment (``דירה``) transactions in radius, enriched with the
+  street/house number that comes back on the polygon metadata (the
+  per-deal payload has ``streetNameHeb=null``). Pipeline:
 
-All three are wired through :class:`GovmapFetchError` on failure. The
-exception carries a Hebrew user-facing ``message_he`` so the Web layer
-can render it directly without leaking technical detail (per CLAUDE.md
-A.8 "polite failure is mandatory").
+    1. ``GET /real-estate/deals/{x},{y}/{radius}`` → polygon metadata.
+    2. Keep top 10 polygons by ``dealscount``.
+    3. For each polygon, ``GET /real-estate/street-deals/{polygon_id}``.
+    4. Filter to ``propertyTypeDescription == "דירה"``.
+    5. Attach polygon-level ``streetNameHeb`` / ``houseNum`` onto each
+       deal (the deal payload has them null when the polygon is in
+       gush-parcel form, e.g. ``"7422-116"``).
+    6. Sort by ``dealDate`` desc, take top ``max_deals``.
 
-Replaces ``nadlan_client.py`` from B.14, which targeted the deprecated
-``Nadlan.REST`` endpoint that now returns the SPA HTML. See
-``nadlan_integration_report.md`` (Iteration 3) for the discovery trail.
+The shape of the calls (URL comma format, minimal headers) follows the
+upstream `nitzpo/nadlan-mcp <https://github.com/nitzpo/nadlan-mcp>`_
+project (MIT licensed). Discovery trail: ``nadlan_integration_report.md``
+"Iteration 4".
+
+Per CLAUDE.md A.8 "polite failure": :class:`GovmapFetchError` is the
+only exception that escapes — it carries a Hebrew ``message_he`` the
+Web layer can show directly to the appraiser.
 """
 from __future__ import annotations
 
 import os
 import re
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from typing import Optional
 
 import requests
@@ -47,42 +55,68 @@ if DEBUG_NADLAN:
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-_AUTOCOMPLETE_URL = "https://www.govmap.gov.il/api/search-service/autocomplete"
-_DEAL_INFO_URL = "https://api.nadlan.gov.il/deal-info"
-_STREET_DEALS_URL_TPL = (
-    "https://www.govmap.gov.il/api/real-estate/street-deals/{polygon_id}"
-)
+_BASE = "https://www.govmap.gov.il/api"
+_AUTOCOMPLETE_URL = f"{_BASE}/search-service/autocomplete"
+_DEALS_RADIUS_URL_TPL = _BASE + "/real-estate/deals/{x},{y}/{radius}"
+_STREET_DEALS_URL_TPL = _BASE + "/real-estate/street-deals/{polygon_id}"
 
 _HTTP_TIMEOUT = 15.0
 _MIN_QUERY_LEN = 2
 
-_GOVMAP_HEADERS = {
-    "Accept": "application/json",
-    "Origin": "https://www.govmap.gov.il",
-    "Referer": "https://www.govmap.gov.il/",
-    "User-Agent": "Mozilla/5.0 (AlapAppraisalSystem)",
+# Cap on how many polygons we drill into per find_comparable_deals call.
+# Matches nitzpo's GOVMAP_MAX_POLYGONS=10 default; protects the appraiser
+# (and us) from a 200-polygon-radius pulling 200 sequential HTTP calls.
+_MAX_POLYGONS = 10
+
+# Polite delay between sequential street-deals calls. With _MAX_POLYGONS=10
+# this adds up to ~2 s in the worst case — invisible to the appraiser
+# who already expects "טוען..." to take a few seconds.
+_STREET_DEALS_DELAY = 0.2
+
+# Apartments only — the same radius may surface stores, parking lots,
+# new-build stalls, etc. The appraisal section 6 is specifically for
+# residential comparables (A.3 + brief).
+_APARTMENT_TYPE = "דירה"
+
+# nitzpo/nadlan-mcp uses only Content-Type + User-Agent. PoC #12 confirmed
+# this is enough for both autocomplete and deals-by-radius; the previous
+# Origin/Referer/Accept headers (kept for our prior nadlan_client) were
+# never actually required and may even have triggered different routing
+# at the CDN.
+_HEADERS = {
+    "Content-Type": "application/json",
+    "User-Agent": "NadlanMCP/1.0.0",
 }
 
-_NADLAN_HEADERS = {
-    "Accept": "application/json",
-    "Origin": "https://www.nadlan.gov.il",
-    "Referer": "https://www.nadlan.gov.il/",
-    "User-Agent": "Mozilla/5.0 (AlapAppraisalSystem)",
-}
-
-# Shared session so connection pool / TLS handshake is reused.
 _session = requests.Session()
+_session.headers.update(_HEADERS)
 
-# Hebrew floor words → numeric value. Floors above 20 are rare in the
-# residential corpus; anything else falls back to 0 and the appraiser
-# fills it manually (A.3 — no fabrication).
+# Hebrew floor words → numeric value. Floors 0–20 cover ~all of the
+# residential corpus; anything else renders as ``""`` and the appraiser
+# fills it in (A.3 — no fabrication).
 _HE_FLOOR_TO_INT: dict[str, int] = {
+    "קומת קרקע": 0,
     "קרקע": 0,
-    "ראשונה": 1, "שניה": 2, "שנייה": 2, "שלישית": 3, "רביעית": 4,
-    "חמישית": 5, "שישית": 6, "שביעית": 7, "שמינית": 8, "תשיעית": 9,
-    "עשירית": 10, "אחת עשרה": 11, "שתיים עשרה": 12, "שתים עשרה": 12,
-    "שלוש עשרה": 13, "ארבע עשרה": 14, "חמש עשרה": 15, "שש עשרה": 16,
-    "שבע עשרה": 17, "שמונה עשרה": 18, "תשע עשרה": 19, "עשרים": 20,
+    "אחת": 1, "ראשונה": 1,
+    "שתיים": 2, "שתים": 2, "שניה": 2, "שנייה": 2,
+    "שלוש": 3, "שלישית": 3,
+    "ארבע": 4, "רביעית": 4,
+    "חמש": 5, "חמישית": 5,
+    "שש": 6, "שישית": 6,
+    "שבע": 7, "שביעית": 7,
+    "שמונה": 8, "שמינית": 8,
+    "תשע": 9, "תשיעית": 9,
+    "עשר": 10, "עשירית": 10,
+    "אחת עשרה": 11,
+    "שתיים עשרה": 12, "שתים עשרה": 12,
+    "שלוש עשרה": 13,
+    "ארבע עשרה": 14,
+    "חמש עשרה": 15,
+    "שש עשרה": 16,
+    "שבע עשרה": 17,
+    "שמונה עשרה": 18,
+    "תשע עשרה": 19,
+    "עשרים": 20,
 }
 
 _POINT_RE = re.compile(r"POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)")
@@ -92,10 +126,10 @@ _POINT_RE = re.compile(r"POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)")
 
 
 class GovmapFetchError(Exception):
-    """Raised when Govmap or nadlan APIs fail in a recoverable way.
+    """Recoverable failure with a Hebrew message for the Web layer.
 
-    ``code`` is a stable string the Web layer maps to ``error_code``.
-    ``message_he`` is a single Hebrew sentence shown to the appraiser.
+    ``code`` is a stable string the Web layer surfaces as ``error_code``.
+    ``message_he`` is one Hebrew sentence the appraiser sees.
     """
 
     def __init__(self, code: str, message_he: str):
@@ -104,17 +138,11 @@ class GovmapFetchError(Exception):
         super().__init__(f"{code}: {message_he}")
 
 
-# Per-code Hebrew messages — kept centrally so the wording stays
-# consistent across the three failure paths.
 _HE_ERR = {
     "AUTOCOMPLETE_UNAVAILABLE": (
         "שירות השלמת כתובות לא זמין כרגע. אנא נסה שוב בעוד דקה."
     ),
-    "POLYGON_LOOKUP_FAILED": (
-        "לא הצלחנו לזהות את הרחוב של הכתובת. "
-        "נסה לבחור כתובת אחרת מההצעות."
-    ),
-    "DEALS_FETCH_FAILED": (
+    "POLYGONS_FETCH_FAILED": (
         "שירות עסקאות נדל\"ן לא זמין כרגע. אנא נסה שוב בעוד דקה."
     ),
 }
@@ -128,22 +156,19 @@ def _raise(code: str) -> None:
 
 
 def autocomplete_address(query: str) -> list[dict]:
-    """Hebrew query → list of candidate locations from Govmap.
+    """Hebrew query → list of address candidates.
 
-    Each returned dict has:
-      * ``display_name`` (str) — the human-readable label from Govmap
-      * ``type`` (str) — usually ``"address"``, ``"street"`` or ``"poi"``
-      * ``itm_x`` (float) — Web-Mercator X parsed from the ``shape`` field
-      * ``itm_y`` (float) — Web-Mercator Y
-      * ``addr_id`` (str or None) — pipe-segment-3 of the API's ``id``
-        field when ``type=="address"``. None for other types (we can
-        only run deal-info on a fully-resolved address).
+    Each result dict has:
+      * ``display_name`` (str) — the human-readable label.
+      * ``type`` (str) — usually ``"address"``, ``"street"``, ``"poi"``.
+      * ``itm_x`` / ``itm_y`` (float) — Web-Mercator EPSG:3857 from the
+        ``shape: "POINT(x y)"`` field.
+      * ``addr_id`` (str or None) — pipe-segment 3 of the API's ``id``
+        when type is address; carried in the response for forward-compat
+        even though the new pipeline doesn't need it.
 
-    A query shorter than two chars short-circuits to ``[]`` so we don't
-    flood Govmap on every keystroke.
-
-    Raises :class:`GovmapFetchError` with ``code=AUTOCOMPLETE_UNAVAILABLE``
-    on any HTTP / parsing failure.
+    Queries shorter than 2 chars short-circuit to ``[]``. Network /
+    parse failures raise ``GovmapFetchError(AUTOCOMPLETE_UNAVAILABLE)``.
     """
     q = (query or "").strip()
     if len(q) < _MIN_QUERY_LEN:
@@ -157,23 +182,17 @@ def autocomplete_address(query: str) -> list[dict]:
     }
 
     if DEBUG_NADLAN:
-        print(f"[GOVMAP DEBUG] autocomplete POST {_AUTOCOMPLETE_URL} query={q!r}", flush=True)
+        print(f"[GOVMAP DEBUG] autocomplete POST query={q!r}", flush=True)
 
     try:
-        resp = _session.post(
-            _AUTOCOMPLETE_URL,
-            json=payload,
-            headers={**_GOVMAP_HEADERS, "Content-Type": "application/json"},
-            timeout=_HTTP_TIMEOUT,
-        )
+        resp = _session.post(_AUTOCOMPLETE_URL, json=payload, timeout=_HTTP_TIMEOUT)
     except Exception as e:
         if DEBUG_NADLAN:
             print(f"[GOVMAP DEBUG] autocomplete connection error: {type(e).__name__}: {e}", flush=True)
         _raise("AUTOCOMPLETE_UNAVAILABLE")
 
     if DEBUG_NADLAN:
-        print(f"[GOVMAP DEBUG] autocomplete status={resp.status_code} ct={resp.headers.get('content-type')}", flush=True)
-        print(f"[GOVMAP DEBUG] autocomplete body (first 400 chars): {resp.text[:400]}", flush=True)
+        print(f"[GOVMAP DEBUG] autocomplete status={resp.status_code}", flush=True)
 
     if not resp.ok:
         _raise("AUTOCOMPLETE_UNAVAILABLE")
@@ -199,8 +218,7 @@ def _parse_autocomplete_result(raw) -> Optional[dict]:
     if not isinstance(raw, dict):
         return None
 
-    shape = raw.get("shape") or ""
-    m = _POINT_RE.search(str(shape))
+    m = _POINT_RE.search(str(raw.get("shape") or ""))
     if not m:
         return None
     try:
@@ -210,15 +228,9 @@ def _parse_autocomplete_result(raw) -> Optional[dict]:
         return None
 
     raw_type = (raw.get("type") or "").strip().lower()
-    id_str = str(raw.get("id") or "")
-    addr_id: Optional[str] = None
 
-    # id format: "address|ADDRESS|64834989|רוטשילד 1|תל אביב"
-    # or         "street|STREET_MID_POINT|36595|רוטשילד|תל אביב"
-    # We only carry addr_id forward when the third segment looks usable
-    # AND the type is address — street/poi rows cannot be passed to
-    # deal-info.
-    parts = id_str.split("|")
+    addr_id: Optional[str] = None
+    parts = str(raw.get("id") or "").split("|")
     if raw_type == "address" and len(parts) >= 3 and parts[2].strip():
         addr_id = parts[2].strip()
 
@@ -231,196 +243,184 @@ def _parse_autocomplete_result(raw) -> Optional[dict]:
     }
 
 
-# ── 2. Polygon-id lookup via deal-info ───────────────────────────────────────
+# ── 2. Radius-based deals pipeline ───────────────────────────────────────────
 
 
-def get_polygon_id_for_address(addr_id: str) -> Optional[str]:
-    """Return the street polygon id for an address id, or ``None`` if absent.
+def find_comparable_deals(
+    point_x: float,
+    point_y: float,
+    radius_m: int = 200,
+    max_deals: int = 10,
+) -> list[ComparisonProperty]:
+    """Return up to ``max_deals`` apartment deals around an ITM point.
 
-    Calls ``POST api.nadlan.gov.il/deal-info`` with
-    ``{"base_name": "addr_id", "base_id": <addr_id>}`` and extracts
-    ``polygon_id`` from the response (the response shape varies by
-    address; we try a few common locations).
-
-    Raises :class:`GovmapFetchError` with ``code=POLYGON_LOOKUP_FAILED``
-    on network / HTTP / parse failure.
+    Multi-step pipeline (see module docstring for the rationale).
+    Polygon-level failures are swallowed silently (partial success — one
+    flaky polygon shouldn't blank the whole table). The radius query
+    itself is the only step whose HTTP failure raises
+    ``GovmapFetchError(POLYGONS_FETCH_FAILED)``; an empty radius result
+    is a valid answer that returns ``[]``.
     """
-    aid = (addr_id or "").strip()
-    if not aid:
-        _raise("POLYGON_LOOKUP_FAILED")
+    polygons = _fetch_polygons_in_radius(point_x, point_y, radius_m)
+    if not polygons:
+        return []
 
-    payload = {"base_name": "addr_id", "base_id": aid}
+    # Pick the polygons with the most deals — best signal that an area
+    # has real residential turnover, vs. an industrial polygon with one
+    # historical transaction.
+    polygons = sorted(
+        polygons,
+        key=lambda p: _coerce_int(p.get("dealscount")) or 0,
+        reverse=True,
+    )[:_MAX_POLYGONS]
+
+    pairs: list[tuple[Optional[datetime], ComparisonProperty]] = []
+
+    for idx, poly in enumerate(polygons):
+        polygon_id = poly.get("polygon_id")
+        if not polygon_id:
+            continue
+
+        if idx > 0:
+            time.sleep(_STREET_DEALS_DELAY)
+
+        street_name = poly.get("streetNameHeb") or ""
+        house_num = poly.get("houseNum") or ""
+
+        deals = _fetch_street_deals(polygon_id)
+        if not deals:
+            continue
+
+        for raw_deal in deals:
+            if not isinstance(raw_deal, dict):
+                continue
+            if raw_deal.get("propertyTypeDescription") != _APARTMENT_TYPE:
+                continue
+            mapped = _deal_to_comparison_property(
+                raw_deal,
+                street_override=street_name,
+                house_override=house_num,
+            )
+            if mapped is None:
+                continue
+            sort_dt = _parse_iso_date(raw_deal.get("dealDate"))
+            pairs.append((sort_dt, mapped))
+
+    # Sort by date desc; None dates go to the bottom.
+    pairs.sort(key=lambda p: p[0] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return [cp for _, cp in pairs[:max_deals]]
+
+
+def _fetch_polygons_in_radius(x: float, y: float, radius: int) -> list[dict]:
+    """Step 1 of the pipeline. Empty list is a valid answer (no deals)."""
+    url = _DEALS_RADIUS_URL_TPL.format(x=x, y=y, radius=int(radius))
 
     if DEBUG_NADLAN:
-        print(f"[GOVMAP DEBUG] deal-info POST {_DEAL_INFO_URL} payload={payload}", flush=True)
+        print(f"[GOVMAP DEBUG] deals-by-radius GET {url}", flush=True)
 
     try:
-        resp = _session.post(
-            _DEAL_INFO_URL,
-            json=payload,
-            headers={**_NADLAN_HEADERS, "Content-Type": "application/json"},
-            timeout=_HTTP_TIMEOUT,
-        )
+        resp = _session.get(url, timeout=_HTTP_TIMEOUT)
     except Exception as e:
         if DEBUG_NADLAN:
-            print(f"[GOVMAP DEBUG] deal-info connection error: {type(e).__name__}: {e}", flush=True)
-        _raise("POLYGON_LOOKUP_FAILED")
+            print(f"[GOVMAP DEBUG] deals-by-radius connection error: {type(e).__name__}: {e}", flush=True)
+        _raise("POLYGONS_FETCH_FAILED")
 
     if DEBUG_NADLAN:
-        print(f"[GOVMAP DEBUG] deal-info status={resp.status_code}", flush=True)
-        print(f"[GOVMAP DEBUG] deal-info body (first 600 chars): {resp.text[:600]}", flush=True)
+        print(
+            f"[GOVMAP DEBUG] deals-by-radius status={resp.status_code} "
+            f"size={len(resp.content)}",
+            flush=True,
+        )
 
     if not resp.ok:
-        _raise("POLYGON_LOOKUP_FAILED")
+        _raise("POLYGONS_FETCH_FAILED")
 
     try:
         body = resp.json()
     except ValueError:
-        _raise("POLYGON_LOOKUP_FAILED")
+        _raise("POLYGONS_FETCH_FAILED")
 
-    return _extract_polygon_id(body)
-
-
-def _extract_polygon_id(body) -> Optional[str]:
-    """Best-effort extraction of polygon_id from the deal-info response.
-
-    The endpoint's payload isn't formally documented; we look in the
-    most likely places. Returning ``None`` is a valid outcome (the
-    address has no associated street polygon — e.g. for newly developed
-    blocks); the caller treats that as "no comparables available".
-    """
-    if not isinstance(body, dict):
-        return None
-
-    # Direct top-level keys first.
-    for key in ("polygon_id", "polygonId", "PolygonId", "POLYGON_ID"):
-        v = body.get(key)
-        if v:
-            return str(v)
-
-    # Nested under a single wrapping object.
-    for wrap in ("data", "result", "response"):
-        nested = body.get(wrap)
-        if isinstance(nested, dict):
-            for key in ("polygon_id", "polygonId", "PolygonId", "POLYGON_ID"):
-                v = nested.get(key)
-                if v:
-                    return str(v)
-
-    return None
+    return body if isinstance(body, list) else []
 
 
-# ── 3. Street-level deals ────────────────────────────────────────────────────
-
-
-def get_street_deals(polygon_id: str, limit: int = 10) -> list[ComparisonProperty]:
-    """Return up to ``limit`` most-recent deals on a street polygon.
-
-    Sorted by ``dealDate`` descending. Field mapping:
-
-    * ``streetNameHeb`` + " " + ``houseNum`` → ``address``
-    * ``assetRoomNum`` → ``rooms``
-    * ``floorNo``     → ``floor`` (Hebrew → digit when known; else ``""``)
-    * ``assetArea``   → ``built_area``
-    * ``None``        → ``balcony_area`` (Govmap doesn't expose this)
-    * ``dealAmount``  → ``price``
-    * ``dealDate``    → ``notes`` (formatted ``D.M.YYYY``)
-
-    A 200 OK with an empty list returns ``[]`` (not an error). All other
-    failures raise :class:`GovmapFetchError` with
-    ``code=DEALS_FETCH_FAILED``.
-    """
-    pid = (polygon_id or "").strip()
-    if not pid:
-        _raise("DEALS_FETCH_FAILED")
-
-    url = _STREET_DEALS_URL_TPL.format(polygon_id=pid)
+def _fetch_street_deals(polygon_id: str) -> list[dict]:
+    """Step 3 of the pipeline. Silent on failure — partial success."""
+    url = _STREET_DEALS_URL_TPL.format(polygon_id=polygon_id)
 
     if DEBUG_NADLAN:
         print(f"[GOVMAP DEBUG] street-deals GET {url}", flush=True)
 
     try:
-        resp = _session.get(url, headers=_GOVMAP_HEADERS, timeout=_HTTP_TIMEOUT)
+        resp = _session.get(url, timeout=_HTTP_TIMEOUT)
     except Exception as e:
         if DEBUG_NADLAN:
             print(f"[GOVMAP DEBUG] street-deals connection error: {type(e).__name__}: {e}", flush=True)
-        _raise("DEALS_FETCH_FAILED")
-
-    if DEBUG_NADLAN:
-        print(f"[GOVMAP DEBUG] street-deals status={resp.status_code} size={len(resp.content)}", flush=True)
+        return []
 
     if not resp.ok:
-        _raise("DEALS_FETCH_FAILED")
+        return []
 
     try:
         body = resp.json()
     except ValueError:
-        _raise("DEALS_FETCH_FAILED")
-
-    raw_deals = _extract_deals_list(body)
-    if not raw_deals:
         return []
 
-    # Sort by parsed dealDate descending (None dates sink to the bottom).
-    def _sort_key(r):
-        d = _parse_iso_date(r.get("dealDate") if isinstance(r, dict) else None)
-        # datetime.min as fallback so None sorts last under reverse=True.
-        return d or datetime.min
-
-    raw_deals = sorted(raw_deals, key=_sort_key, reverse=True)
-
-    out: list[ComparisonProperty] = []
-    for raw in raw_deals:
-        cp = _to_comparison_property(raw)
-        if cp is not None:
-            out.append(cp)
-            if len(out) >= limit:
-                break
-    return out
-
-
-def _extract_deals_list(body) -> list:
-    """The endpoint may wrap the list in a couple of common shapes."""
     if isinstance(body, list):
         return body
     if isinstance(body, dict):
-        for key in ("deals", "Deals", "results", "data"):
-            v = body.get(key)
-            if isinstance(v, list):
-                return v
+        data = body.get("data")
+        if isinstance(data, list):
+            return data
     return []
 
 
-def _to_comparison_property(raw) -> Optional[ComparisonProperty]:
-    if not isinstance(raw, dict):
-        return None
+# ── Field-level helpers ──────────────────────────────────────────────────────
 
-    price = _coerce_float(raw.get("dealAmount"))
-    built_area = _coerce_float(raw.get("assetArea"))
+
+def _deal_to_comparison_property(
+    deal: dict,
+    *,
+    street_override: str = "",
+    house_override: str = "",
+) -> Optional[ComparisonProperty]:
+    """Map one Govmap deal dict to a ``ComparisonProperty`` row.
+
+    Address-side: per Test 13b the deal payload itself has
+    ``streetNameHeb=null`` and ``houseNum=null`` when ``polygon_id`` is
+    in gush-parcel form ("7422-116"). We therefore prefer the polygon
+    metadata's address fields, falling back to the deal's only if the
+    polygon ones were empty. The deal's ``neighborhood`` is appended
+    when neither street nor polygon yielded an address (so the row is
+    at least geographically situated rather than fully blank).
+    """
+    price = _coerce_float(deal.get("dealAmount"))
+    built_area = _coerce_float(deal.get("assetArea"))
     if price is None or built_area is None or price <= 0 or built_area <= 0:
         return None
 
-    street = (raw.get("streetNameHeb") or "").strip()
-    house = str(raw.get("houseNum") or "").strip()
-    address = f"{street} {house}".strip()
+    street = (street_override or deal.get("streetNameHeb") or "").strip()
+    house_raw = house_override if house_override else deal.get("houseNum")
+    house = str(house_raw).strip() if house_raw not in (None, "", "0") else ""
 
-    rooms = _format_rooms(raw.get("assetRoomNum"))
-    floor = _format_floor(raw.get("floorNo"))
-    deal_date_str = _format_deal_date(raw.get("dealDate"))
+    if street:
+        address = f"{street} {house}".strip()
+    else:
+        # Fall back to neighborhood + settlement so the row isn't blank.
+        neighborhood = (deal.get("neighborhood") or "").strip()
+        settlement = (deal.get("settlementNameHeb") or "").strip()
+        parts = [p for p in (neighborhood, settlement) if p]
+        address = ", ".join(parts) if parts else ""
 
     return ComparisonProperty(
         address=address,
-        floor=floor,
-        rooms=rooms,
+        floor=_format_floor(deal.get("floorNo")),
+        rooms=_format_rooms(deal.get("assetRoomNum")),
         built_area=built_area,
         balcony_area=None,
         price=price,
-        notes=deal_date_str,
+        notes=_format_deal_date(deal.get("dealDate")),
         is_outlier=False,
     )
-
-
-# ── Field-level helpers ──────────────────────────────────────────────────────
 
 
 def _coerce_float(v) -> Optional[float]:
@@ -432,18 +432,28 @@ def _coerce_float(v) -> Optional[float]:
         return None
 
 
+def _coerce_int(v) -> Optional[int]:
+    if v is None or v == "":
+        return None
+    try:
+        return int(float(str(v)))
+    except (TypeError, ValueError):
+        return None
+
+
 def _format_rooms(v) -> str:
     f = _coerce_float(v)
-    if f is None:
+    if f is None or f <= 0:
         return ""
+    # Govmap returns 3.0 / 3.5 etc — drop trailing .0 for table tidiness.
     return f"{f:g}"
 
 
 def _format_floor(v) -> str:
-    """Hebrew floor name → digit string; pass numerics through unchanged.
+    """Govmap returns Hebrew words like ``"עשרים"`` or sometimes an int.
 
-    Unknown Hebrew strings render as ``""`` so the appraiser sees the
-    field is empty and fills it manually. We never invent a number.
+    Returns the digit as a string when known, ``""`` otherwise (the
+    appraiser fills it manually — never fabricated).
     """
     if v is None:
         return ""
@@ -451,12 +461,10 @@ def _format_floor(v) -> str:
     if not s:
         return ""
 
-    # Numeric already?
     f = _coerce_float(s)
     if f is not None:
         return f"{int(f)}"
 
-    # Hebrew word → digit
     return str(_HE_FLOOR_TO_INT.get(s, ""))
 
 
@@ -466,14 +474,18 @@ def _parse_iso_date(v) -> Optional[datetime]:
     s = str(v).strip()
     if not s:
         return None
-    # Strip trailing Z / fractional seconds: "2015-02-15T00:00:00.000Z"
-    s = s.rstrip("Z")
+    # Strip "Z" / fractional seconds: "2024-06-19T00:00:00.000Z"
+    s = s.replace("Z", "+00:00")
     if "." in s:
-        s = s.split(".", 1)[0]
+        head, tail = s.split(".", 1)
+        # Re-attach any TZ that lived past the fractional seconds.
+        plus_idx = tail.find("+")
+        minus_idx = tail.find("-")
+        idx = next((i for i in (plus_idx, minus_idx) if i >= 0), -1)
+        s = head + (tail[idx:] if idx >= 0 else "")
     try:
         return datetime.fromisoformat(s)
     except ValueError:
-        # Sometimes the API returns just "YYYY-MM-DD".
         try:
             return datetime.strptime(s[:10], "%Y-%m-%d")
         except ValueError:
@@ -481,7 +493,7 @@ def _parse_iso_date(v) -> Optional[datetime]:
 
 
 def _format_deal_date(v) -> str:
-    """ISO date → ``D.M.YYYY`` (Israeli convention, not zero-padded)."""
+    """ISO 8601 → ``D.M.YYYY`` (Israeli convention, not zero-padded)."""
     dt = _parse_iso_date(v)
     if dt is None:
         return ""

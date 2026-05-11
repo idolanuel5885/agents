@@ -107,19 +107,6 @@ async def lookup_parcel_endpoint(address: str = Form(...)):
     return result.to_dict()
 
 
-# ── PoC endpoint (temporary, follow-up iteration) ────────────────────────────
-# Probes Govmap's deals-by-radius endpoint to see whether it returns
-# the polygon list nitzpo/nadlan-mcp documents, and whether feeding
-# those polygon ids back into street-deals yields recent area-wide
-# deals. To be removed once the answer is in.
-
-
-@router.get("/poc-test", response_class=Response)
-async def poc_test_endpoint():
-    from tests.poc_new_endpoints import run_poc
-    return Response(content=run_poc(), media_type="text/plain; charset=utf-8")
-
-
 # ── Address autocomplete + comparable transactions endpoints ─────────────────
 
 
@@ -128,8 +115,10 @@ class _AutocompleteRequest(BaseModel):
 
 
 class _ComparablesRequest(BaseModel):
-    addr_id: str = ""
-    limit: int = 10
+    itm_x: float
+    itm_y: float
+    radius_m: int = 200
+    max_deals: int = 10
 
 
 def _serialise_deal(cp: ComparisonProperty) -> dict:
@@ -168,78 +157,51 @@ async def autocomplete_endpoint(req: _AutocompleteRequest):
 
 @router.post("/comparables")
 async def comparables_endpoint(req: _ComparablesRequest):
-    """Resolve an addr_id to a list of recent street-level deals.
+    """Return recent apartment deals around an ITM Web-Mercator point.
 
-    Two-step pipeline: ``addr_id`` → polygon_id (via nadlan deal-info),
-    polygon_id → deals (via Govmap street-deals). Always returns HTTP
-    200 — failures are encoded in the body per CLAUDE.md A.8.
+    The two ITM coordinates come from the autocomplete selection (the
+    form stores them in hidden inputs after the appraiser picks an
+    address). Always returns HTTP 200 — see CLAUDE.md A.8.
     """
-    addr_id = (req.addr_id or "").strip()
-    limit = max(1, min(int(req.limit or 10), 50))
-
-    if not addr_id:
-        return {
-            "success": False,
-            "error_code": "POLYGON_LOOKUP_FAILED",
-            "message_he": _HE_ERR_POLYGON,
-        }
-
-    try:
-        polygon_id = govmap_client.get_polygon_id_for_address(addr_id)
-    except govmap_client.GovmapFetchError as e:
-        return {"success": False, "error_code": e.code, "message_he": e.message_he}
-    except Exception:
-        logger.exception("polygon lookup raised unexpectedly")
-        return {
-            "success": False,
-            "error_code": "POLYGON_LOOKUP_FAILED",
-            "message_he": _HE_ERR_POLYGON,
-        }
-
-    if not polygon_id:
-        return {
-            "success": False,
-            "error_code": "POLYGON_LOOKUP_FAILED",
-            "message_he": _HE_ERR_POLYGON,
-        }
-
-    try:
-        deals = govmap_client.get_street_deals(polygon_id, limit=limit)
-    except govmap_client.GovmapFetchError as e:
-        return {"success": False, "error_code": e.code, "message_he": e.message_he}
-    except Exception:
-        logger.exception("street-deals raised unexpectedly")
-        return {
-            "success": False,
-            "error_code": "DEALS_FETCH_FAILED",
-            "message_he": _HE_ERR_DEALS,
-        }
-
+    radius = max(50, min(int(req.radius_m or 200), 1000))
+    max_deals = max(1, min(int(req.max_deals or 10), 50))
     fetched_at = date.today().isoformat()
+
+    try:
+        deals = govmap_client.find_comparable_deals(
+            req.itm_x, req.itm_y, radius_m=radius, max_deals=max_deals,
+        )
+    except govmap_client.GovmapFetchError as e:
+        return {"success": False, "error_code": e.code, "message_he": e.message_he}
+    except Exception:
+        logger.exception("find_comparable_deals raised unexpectedly")
+        return {
+            "success": False,
+            "error_code": "POLYGONS_FETCH_FAILED",
+            "message_he": (
+                "שירות עסקאות נדל\"ן לא זמין כרגע. אנא נסה שוב בעוד דקה."
+            ),
+        }
+
     if not deals:
         return {
             "success": True,
             "error_code": "NO_DEALS_FOUND",
             "deals": [],
             "fetched_at": fetched_at,
-            "source": "govmap.gov.il / nadlan.gov.il",
-            "message_he": "לא נמצאו עסקאות ברחוב זה.",
+            "source": "govmap.gov.il",
+            "message_he": (
+                "לא נמצאו עסקאות דירה ברדיוס שנבחר. "
+                "נסה רדיוס גדול יותר."
+            ),
         }
 
     return {
         "success": True,
         "deals": [_serialise_deal(d) for d in deals],
         "fetched_at": fetched_at,
-        "source": "govmap.gov.il / nadlan.gov.il",
+        "source": "govmap.gov.il",
     }
-
-
-_HE_ERR_POLYGON = (
-    "לא הצלחנו לזהות את הרחוב של הכתובת. נסה לבחור כתובת אחרת מההצעות."
-)
-_HE_ERR_DEALS = (
-    "שירות עסקאות נדל\"ן לא זמין כרגע. אנא נסה שוב בעוד דקה."
-)
 
 
 # ── Generation endpoint ───────────────────────────────────────────────────────
