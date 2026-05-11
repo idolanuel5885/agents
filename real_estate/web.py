@@ -16,7 +16,7 @@ from .models import (
 from .report_generator import generate_report_bytes
 from . import claude_descriptions
 from . import parcel_lookup
-from . import nadlan_client
+from . import govmap_client
 
 import logging
 
@@ -107,32 +107,16 @@ async def lookup_parcel_endpoint(address: str = Form(...)):
     return result.to_dict()
 
 
-# ── PoC endpoint (temporary) ──────────────────────────────────────────────────
-# Probes the new endpoints discovered in nadlan.gov.il's Network tab to
-# learn whether Railway can reach them at all and what they return.
-# Removed once we know the answer. Returns text/plain so the result is
-# readable in a browser without devtools. See tests/poc_new_endpoints.py.
+# ── Address autocomplete + comparable transactions endpoints ─────────────────
 
 
-@router.get("/poc-test", response_class=Response)
-async def poc_test_endpoint():
-    from tests.poc_new_endpoints import run_poc
-    return Response(content=run_poc(), media_type="text/plain; charset=utf-8")
+class _AutocompleteRequest(BaseModel):
+    query: str = ""
 
 
-# ── Comparable transactions endpoint ──────────────────────────────────────────
 class _ComparablesRequest(BaseModel):
-    """Body for ``POST /shuma/comparables``.
-
-    Either ``address`` (geocoded server-side) or ``itm_x``+``itm_y`` are
-    required. ``itm_x``/``itm_y`` win if both are provided so the
-    appraiser can override a wrong geocoding result by entering ITM
-    coordinates manually.
-    """
-    address: str = ""
-    radius_m: int = 300
-    itm_x: Optional[float] = None
-    itm_y: Optional[float] = None
+    addr_id: str = ""
+    limit: int = 10
 
 
 def _serialise_deal(cp: ComparisonProperty) -> dict:
@@ -147,82 +131,102 @@ def _serialise_deal(cp: ComparisonProperty) -> dict:
     }
 
 
+@router.post("/autocomplete")
+async def autocomplete_endpoint(req: _AutocompleteRequest):
+    """Govmap address autocomplete.
+
+    Always returns HTTP 200. On failure the body has
+    ``success=false, error_code, message_he`` so the form can show a
+    Hebrew message and let the appraiser keep typing.
+    """
+    try:
+        results = govmap_client.autocomplete_address(req.query)
+    except govmap_client.GovmapFetchError as e:
+        return {"success": False, "error_code": e.code, "message_he": e.message_he}
+    except Exception:
+        logger.exception("autocomplete raised unexpectedly")
+        return {
+            "success": False,
+            "error_code": "AUTOCOMPLETE_UNAVAILABLE",
+            "message_he": "שירות השלמת כתובות לא זמין כרגע. אנא נסה שוב בעוד דקה.",
+        }
+    return {"success": True, "results": results}
+
+
 @router.post("/comparables")
 async def comparables_endpoint(req: _ComparablesRequest):
-    """Best-effort fetch of recent transactions around a coordinate.
+    """Resolve an addr_id to a list of recent street-level deals.
 
-    The handler never returns 5xx — every failure path emits HTTP 200
-    with ``success=false`` plus a Hebrew ``message_he`` so the form can
-    show the user a sentence they can act on (per CLAUDE.md A.8).
+    Two-step pipeline: ``addr_id`` → polygon_id (via nadlan deal-info),
+    polygon_id → deals (via Govmap street-deals). Always returns HTTP
+    200 — failures are encoded in the body per CLAUDE.md A.8.
     """
-    # Unconditional entry print: prove the endpoint was reached at all.
-    # Even with DEBUG_NADLAN=0 this single line per click gives us "yes,
-    # the request hit the server" without spamming the logs.
-    print(
-        f"[NADLAN DEBUG] /shuma/comparables ENTERED "
-        f"address={req.address!r} radius={req.radius_m} "
-        f"itm=({req.itm_x},{req.itm_y})",
-        flush=True,
-    )
+    addr_id = (req.addr_id or "").strip()
+    limit = max(1, min(int(req.limit or 10), 50))
 
-    radius = max(50, min(int(req.radius_m or 300), 5000))
-
-    if req.itm_x is not None and req.itm_y is not None:
-        itm_x, itm_y = float(req.itm_x), float(req.itm_y)
-    else:
-        coords = nadlan_client.address_to_itm(req.address)
-        if coords is None:
-            print(
-                "[NADLAN DEBUG] /shuma/comparables → GEOCODING_FAILED "
-                "(address_to_itm returned None)",
-                flush=True,
-            )
-            return {
-                "success": False,
-                "error_code": "GEOCODING_FAILED",
-                "message_he": (
-                    "לא הצלחנו לזהות את הכתובת. אנא הזן גוש/חלקה או "
-                    "קואורדינטות ידנית."
-                ),
-            }
-        itm_x, itm_y = coords
+    if not addr_id:
+        return {
+            "success": False,
+            "error_code": "POLYGON_LOOKUP_FAILED",
+            "message_he": _HE_ERR_POLYGON,
+        }
 
     try:
-        deals = nadlan_client.fetch_recent_deals(
-            itm_x, itm_y, radius, address_label=(req.address or "").strip(),
-        )
-    except nadlan_client.NadlanFetchError as e:
+        polygon_id = govmap_client.get_polygon_id_for_address(addr_id)
+    except govmap_client.GovmapFetchError as e:
+        return {"success": False, "error_code": e.code, "message_he": e.message_he}
+    except Exception:
+        logger.exception("polygon lookup raised unexpectedly")
         return {
             "success": False,
-            "error_code": "NADLAN_UNAVAILABLE",
-            "message_he": str(e),
-        }
-    except Exception as e:
-        logger.exception("nadlan fetch raised unexpectedly")
-        return {
-            "success": False,
-            "error_code": "NADLAN_UNAVAILABLE",
-            "message_he": (
-                "שירות נדל\"ן.gov.il לא זמין כרגע. אנא הזן עסקאות ידנית "
-                "או נסה שוב בעוד דקה."
-            ),
+            "error_code": "POLYGON_LOOKUP_FAILED",
+            "message_he": _HE_ERR_POLYGON,
         }
 
+    if not polygon_id:
+        return {
+            "success": False,
+            "error_code": "POLYGON_LOOKUP_FAILED",
+            "message_he": _HE_ERR_POLYGON,
+        }
+
+    try:
+        deals = govmap_client.get_street_deals(polygon_id, limit=limit)
+    except govmap_client.GovmapFetchError as e:
+        return {"success": False, "error_code": e.code, "message_he": e.message_he}
+    except Exception:
+        logger.exception("street-deals raised unexpectedly")
+        return {
+            "success": False,
+            "error_code": "DEALS_FETCH_FAILED",
+            "message_he": _HE_ERR_DEALS,
+        }
+
+    fetched_at = date.today().isoformat()
     if not deals:
         return {
             "success": True,
+            "error_code": "NO_DEALS_FOUND",
             "deals": [],
-            "fetched_at": date.today().isoformat(),
-            "source": "nadlan.gov.il",
-            "message_he": "לא נמצאו עסקאות ברדיוס שבחרת. נסה להגדיל את הרדיוס.",
+            "fetched_at": fetched_at,
+            "source": "govmap.gov.il / nadlan.gov.il",
+            "message_he": "לא נמצאו עסקאות ברחוב זה.",
         }
 
     return {
         "success": True,
         "deals": [_serialise_deal(d) for d in deals],
-        "fetched_at": date.today().isoformat(),
-        "source": "nadlan.gov.il",
+        "fetched_at": fetched_at,
+        "source": "govmap.gov.il / nadlan.gov.il",
     }
+
+
+_HE_ERR_POLYGON = (
+    "לא הצלחנו לזהות את הרחוב של הכתובת. נסה לבחור כתובת אחרת מההצעות."
+)
+_HE_ERR_DEALS = (
+    "שירות עסקאות נדל\"ן לא זמין כרגע. אנא נסה שוב בעוד דקה."
+)
 
 
 # ── Generation endpoint ───────────────────────────────────────────────────────

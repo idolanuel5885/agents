@@ -205,10 +205,13 @@ def _to_itm(lat: float, lon: float) -> tuple[float, float]:
 
 
 # ── Public wrappers for shared use (e.g. nadlan_client) ──────────────────────
-# Other modules in real_estate/ reuse the same Hebrew-address → ITM pipeline.
-# These wrappers expose the helpers without a leading underscore and convert
-# the internal LookupError_ into a None return so callers can degrade
-# gracefully without importing the private exception type.
+# DEPRECATED — these public wrappers were originally added so the legacy
+# nadlan_client (B.14, removed in May 2026) could share the Hebrew-address
+# → WGS84 → ITM pipeline. The Govmap-based replacement carries its own
+# Web-Mercator coordinates inline and no longer needs them. They are kept
+# here for now because parcel_lookup itself still depends on the private
+# `_geocode` / `_to_itm` and we don't want a future re-enable of the
+# parcel-lookup UI (C.10) to have to re-invent the wrappers.
 
 
 def geocode(address: str) -> tuple[float, float] | None:

@@ -607,6 +607,39 @@
 
     input[type="number"] { direction: ltr; text-align: right; }
     input[type="date"]   { direction: ltr; text-align: right; }
+
+    /* ── Comparables autocomplete dropdown ── */
+    .cmp-ac-list {
+      list-style: none;
+      margin: 4px 0 0 0;
+      padding: 0;
+      position: absolute;
+      top: 100%; right: 0; left: 0;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      max-height: 320px;
+      overflow-y: auto;
+      z-index: 30;
+    }
+    .cmp-ac-list li {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #f1f1f1;
+    }
+    .cmp-ac-list li:last-child { border-bottom: none; }
+    .cmp-ac-list li:hover,
+    .cmp-ac-list li[aria-selected="true"] { background: var(--teal-soft); }
+    .cmp-ac-list li .cmp-ac-type {
+      display: inline-block;
+      font-size: 11px;
+      background: #f0f0f0;
+      color: #555;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-inline-start: 6px;
+    }
   </style>
 </head>
 <body>
@@ -1041,45 +1074,31 @@
   <div class="card">
     <div class="card-header">
       <h2>עסקאות השוואה</h2>
-      <span class="badge-opt">אופציונלי — אוטומטי מנדל"ן.gov.il</span>
+      <span class="badge-opt">אופציונלי — אוטומטי מ-Govmap</span>
     </div>
     <div class="card-body">
-    <div class="fg">
 
-      <div class="f">
-        <label for="comparables_radius">רדיוס חיפוש (מטרים): <span id="comparables-radius-value">300</span></label>
-        <input type="range" id="comparables_radius" min="100" max="1000" step="50" value="300">
-        <span class="hint">100–1000 מטרים סביב הנכס</span>
+    <div class="fg">
+      <div class="f full" style="position:relative;">
+        <label for="cmp-address-input">כתובת לחיפוש עסקאות</label>
+        <input type="text" id="cmp-address-input" autocomplete="off"
+               placeholder="התחל להקליד — לדוגמה: רוטשילד 1 תל אביב">
+        <span class="hint">בחר כתובת מהרשימה המוצעת. רחובות / נקודות עניין אינם זמינים — רק כתובת עם מספר בית.</span>
+        <ul id="cmp-autocomplete-list" class="cmp-ac-list hidden" role="listbox"></ul>
       </div>
 
       <div class="f">
         <label>&nbsp;</label>
-        <button type="button" id="comparables-load-btn" class="btn-secondary">
-          טען עסקאות השוואה
+        <button type="button" id="comparables-load-btn" class="btn-secondary" disabled>
+          טען עסקאות
         </button>
       </div>
-
     </div>
+
+    <input type="hidden" id="cmp-selected-addr-id" value="">
+    <input type="hidden" id="cmp-selected-display" value="">
 
     <div id="comparables-status" class="hint" style="margin-top:10px;"></div>
-
-    <!-- Manual ITM coordinate fallback, shown only after geocoding fails. -->
-    <div id="comparables-itm-fallback" class="fg hidden" style="margin-top:10px;">
-      <div class="f">
-        <label>X ידני (ITM)</label>
-        <input type="number" id="comparables_itm_x" step="any" placeholder="180555">
-      </div>
-      <div class="f">
-        <label>Y ידני (ITM)</label>
-        <input type="number" id="comparables_itm_y" step="any" placeholder="663680">
-      </div>
-      <div class="f">
-        <label>&nbsp;</label>
-        <button type="button" id="comparables-itm-retry-btn" class="btn-secondary">
-          טען בקואורדינטות אלה
-        </button>
-      </div>
-    </div>
 
     <div id="comparables-results" class="hidden" style="margin-top:14px;">
       <div style="overflow-x:auto;">
@@ -1101,7 +1120,8 @@
         </table>
       </div>
       <p class="hint" style="margin-top:8px;">
-        השמאי בוחר אילו עסקאות ייכנסו לדוח. שטח מרפסת ניתן להשלמה ידנית. סמן "חריגה" לעסקאות שיש לתת להן משקל נמוך.
+        השמאי בוחר אילו עסקאות ייכנסו לדוח. שטח מרפסת ניתן להשלמה ידנית.
+        סמן "חריגה" לעסקאות שיש לתת להן משקל נמוך.
       </p>
     </div>
 
@@ -1250,7 +1270,6 @@
       .forEach(el => {
         if (!el.name) return;
         if (el.closest && el.closest('#comparables-results')) return;
-        if (el.id === 'comparables_radius' || el.id === 'comparables_itm_x' || el.id === 'comparables_itm_y') return;
         fd.append(el.name, el.value);
       });
     // Checkboxes — always send explicitly
@@ -1290,20 +1309,19 @@
     return fd;
   }
 
-  // ── Comparables (nadlan.gov.il) ───────────────────────────────────────────
+  // ── Comparables (Govmap autocomplete + street-deals) ──────────────────────
   (function () {
-    const slider     = document.getElementById('comparables_radius');
-    const sliderVal  = document.getElementById('comparables-radius-value');
-    const btn        = document.getElementById('comparables-load-btn');
-    const status     = document.getElementById('comparables-status');
-    const results    = document.getElementById('comparables-results');
-    const tbody      = document.getElementById('comparables-tbody');
-    const itmBlock   = document.getElementById('comparables-itm-fallback');
-    const itmRetry   = document.getElementById('comparables-itm-retry-btn');
+    const acInput     = document.getElementById('cmp-address-input');
+    const acList      = document.getElementById('cmp-autocomplete-list');
+    const addrIdInput = document.getElementById('cmp-selected-addr-id');
+    const dispInput   = document.getElementById('cmp-selected-display');
+    const btn         = document.getElementById('comparables-load-btn');
+    const status      = document.getElementById('comparables-status');
+    const results     = document.getElementById('comparables-results');
+    const tbody       = document.getElementById('comparables-tbody');
 
-    slider.addEventListener('input', () => {
-      sliderVal.textContent = slider.value;
-    });
+    let acDebounce = null;
+    let acAbort = null;
 
     function setStatus(text, kind) {
       status.textContent = text || '';
@@ -1315,6 +1333,95 @@
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+
+    function hideList() {
+      acList.innerHTML = '';
+      acList.classList.add('hidden');
+    }
+
+    function renderAutocomplete(items) {
+      acList.innerHTML = '';
+      if (!items.length) {
+        hideList();
+        return;
+      }
+      items.forEach(item => {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'option');
+        li.dataset.addrId = item.addr_id;
+        li.dataset.display = item.display_name;
+        li.innerHTML = `${escapeHtml(item.display_name)}` +
+          `<span class="cmp-ac-type">${escapeHtml(item.type)}</span>`;
+        li.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          selectItem(item);
+        });
+        acList.appendChild(li);
+      });
+      acList.classList.remove('hidden');
+    }
+
+    function selectItem(item) {
+      acInput.value = item.display_name;
+      addrIdInput.value = item.addr_id || '';
+      dispInput.value = item.display_name;
+      hideList();
+      btn.disabled = !item.addr_id;
+      setStatus('', '');
+    }
+
+    async function queryAutocomplete(q) {
+      if (acAbort) { try { acAbort.abort(); } catch {} }
+      acAbort = new AbortController();
+      try {
+        const resp = await fetch('/shuma/autocomplete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ query: q }),
+          signal:  acAbort.signal,
+        });
+        const data = await resp.json();
+        if (!data.success) {
+          setStatus(data.message_he || 'שגיאה בשירות השלמת כתובות.', 'error');
+          hideList();
+          return;
+        }
+        const addressOnly = (data.results || []).filter(r => r.type === 'address' && r.addr_id);
+        if (!addressOnly.length) {
+          setStatus('לא נמצאו כתובות מדויקות. נסה להוסיף מספר בית.', '');
+          hideList();
+          return;
+        }
+        setStatus('', '');
+        renderAutocomplete(addressOnly);
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        setStatus('שגיאת רשת בשירות השלמת כתובות.', 'error');
+        hideList();
+      }
+    }
+
+    acInput.addEventListener('input', () => {
+      // User edited the field — invalidate any prior selection so the
+      // button stays disabled until they pick a fresh autocomplete row.
+      addrIdInput.value = '';
+      dispInput.value = '';
+      btn.disabled = true;
+
+      const q = acInput.value.trim();
+      if (q.length < 2) {
+        hideList();
+        setStatus('', '');
+        return;
+      }
+      clearTimeout(acDebounce);
+      acDebounce = setTimeout(() => queryAutocomplete(q), 300);
+    });
+
+    // Hide dropdown when the user clicks elsewhere.
+    document.addEventListener('click', (ev) => {
+      if (ev.target !== acInput && !acList.contains(ev.target)) hideList();
+    });
 
     function renderDeals(deals) {
       tbody.innerHTML = '';
@@ -1353,41 +1460,29 @@
       });
     }
 
-    async function loadComparables(opts) {
-      opts = opts || {};
-      const address = document.getElementById('address').value.trim();
-      const radius  = parseInt(slider.value, 10) || 300;
-      if (!opts.itm_x && !address) {
-        setStatus('יש להזין כתובת לפני טעינת עסקאות.', 'error');
+    async function loadComparables() {
+      const addrId = addrIdInput.value.trim();
+      if (!addrId) {
+        setStatus('בחר כתובת מההצעות לפני טעינת עסקאות.', 'error');
         return;
       }
       setStatus('טוען...', '');
       btn.disabled = true;
-      itmRetry && (itmRetry.disabled = true);
       try {
-        const body = { address, radius_m: radius };
-        if (opts.itm_x != null && opts.itm_y != null) {
-          body.itm_x = opts.itm_x;
-          body.itm_y = opts.itm_y;
-        }
         const resp = await fetch('/shuma/comparables', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify(body),
+          body:    JSON.stringify({ addr_id: addrId, limit: 10 }),
         });
         const data = await resp.json();
         if (!data.success) {
           setStatus(data.message_he || 'שגיאה בטעינת עסקאות.', 'error');
-          if (data.error_code === 'GEOCODING_FAILED') {
-            itmBlock.classList.remove('hidden');
-          }
           results.classList.add('hidden');
           window._comparablesFetchedAt = null;
           return;
         }
-        itmBlock.classList.add('hidden');
         if (!data.deals || data.deals.length === 0) {
-          setStatus(data.message_he || 'לא נמצאו עסקאות ברדיוס שבחרת.', '');
+          setStatus(data.message_he || 'לא נמצאו עסקאות ברחוב זה.', '');
           results.classList.add('hidden');
           window._comparablesFetchedAt = null;
           return;
@@ -1401,23 +1496,11 @@
         results.classList.add('hidden');
         window._comparablesFetchedAt = null;
       } finally {
-        btn.disabled = false;
-        itmRetry && (itmRetry.disabled = false);
+        btn.disabled = !addrIdInput.value.trim();
       }
     }
 
     btn.addEventListener('click', () => loadComparables());
-    if (itmRetry) {
-      itmRetry.addEventListener('click', () => {
-        const x = parseFloat(document.getElementById('comparables_itm_x').value);
-        const y = parseFloat(document.getElementById('comparables_itm_y').value);
-        if (!isFinite(x) || !isFinite(y)) {
-          setStatus('יש להזין X ו-Y בקואורדינטות ITM.', 'error');
-          return;
-        }
-        loadComparables({ itm_x: x, itm_y: y });
-      });
-    }
   })();
 
   // ── Submit ────────────────────────────────────────────────────────────────
