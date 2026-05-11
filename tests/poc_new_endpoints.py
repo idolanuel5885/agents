@@ -239,6 +239,116 @@ def _run_probes() -> None:
 
     print()
     print("=" * 60)
+    print("Test 7: Govmap deals by radius (50m around Rothschild 1 TLV)")
+    print("=" * 60)
+
+    point_x = 3871406.911338617
+    point_y = 3772053.768985697
+    radius = 50
+
+    url = (
+        f"https://www.govmap.gov.il/api/real-estate/deals/"
+        f"({point_x} {point_y})/{radius}"
+    )
+
+    try:
+        r = requests.get(
+            url,
+            headers={
+                "Accept": "application/json",
+                "Origin": "https://www.govmap.gov.il",
+                "Referer": "https://www.govmap.gov.il/",
+                "User-Agent": "Mozilla/5.0 (test)",
+            },
+            timeout=15,
+        )
+        print(f"Status: {r.status_code}")
+        print(f"Content-Type: {r.headers.get('content-type')}")
+        print(f"Response size: {len(r.content)} bytes")
+        print("First 1500 chars:")
+        print(r.text[:1500])
+        if r.status_code == 200 and "application/json" in (r.headers.get("content-type") or ""):
+            try:
+                data = r.json()
+                if isinstance(data, list):
+                    print(f"\nParsed as list of {len(data)} deals.")
+                    if data:
+                        first = data[0]
+                        if isinstance(first, dict):
+                            print(f"First deal keys: {list(first.keys())}")
+                            print(
+                                f"First deal: "
+                                f"{json.dumps(first, ensure_ascii=False, indent=2)[:800]}"
+                            )
+                        else:
+                            print(f"First item (raw): {first!r}")
+                elif isinstance(data, dict):
+                    print(f"\nParsed as dict. Keys: {list(data.keys())}")
+            except Exception as e:
+                print(f"JSON parse failed: {e}")
+    except Exception as e:
+        print(f"FAILED: {type(e).__name__}: {e}")
+
+    print()
+    print("=" * 60)
+    print("Test 8: Govmap street-deals for Rothschild polygon")
+    print("=" * 60)
+
+    test_ids_8 = ["53292326", "50001103"]
+
+    for pid in test_ids_8:
+        url = f"https://www.govmap.gov.il/api/real-estate/street-deals/{pid}"
+        try:
+            r = requests.get(
+                url,
+                headers={
+                    "Accept": "application/json",
+                    "Origin": "https://www.govmap.gov.il",
+                    "Referer": "https://www.govmap.gov.il/",
+                    "User-Agent": "Mozilla/5.0 (test)",
+                },
+                timeout=15,
+            )
+            print(f"\nID={pid}: Status={r.status_code}, size={len(r.content)}")
+            if r.status_code == 200:
+                print(f"  Content-Type: {r.headers.get('content-type')}")
+                print(f"  First 500 chars: {r.text[:500]}")
+        except Exception as e:
+            print(f"  FAILED: {type(e).__name__}: {e}")
+
+    print()
+    print("=" * 60)
+    print("Test 9: Govmap entitiesByPoint (find polygons at a coordinate)")
+    print("=" * 60)
+
+    url = "https://www.govmap.gov.il/api/layers-catalog/entitiesByPoint"
+
+    try:
+        r = requests.post(
+            url,
+            json={
+                "x": 3871406.911338617,
+                "y": 3772053.768985697,
+                "layers": ["neighborhoods", "streets", "parcels"],
+            },
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Origin": "https://www.govmap.gov.il",
+                "Referer": "https://www.govmap.gov.il/",
+                "User-Agent": "Mozilla/5.0 (test)",
+            },
+            timeout=15,
+        )
+        print(f"Status: {r.status_code}")
+        print(f"Content-Type: {r.headers.get('content-type')}")
+        print("First 1000 chars:")
+        print(r.text[:1000])
+    except Exception as e:
+        print(f"FAILED: {type(e).__name__}: {e}")
+
+    print()
+    print("=" * 60)
     print("PoC complete.")
     print("=" * 60)
 
