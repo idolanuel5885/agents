@@ -236,3 +236,91 @@ If the live response shape on the production environment differs
 from the one assumed by `govmap_client._to_comparison_property` or
 `govmap_client._extract_polygon_id`, update those helpers — they are
 the only two places the wire-format is interpreted.
+
+---
+
+# Iteration 4 — Final radius-based pipeline (2026-05)
+
+## What changed
+
+Iteration 3 wired a working `autocomplete → deal-info → street-deals`
+chain. After live testing, the appraiser discovered the chain only
+returns deals from the **single building** the address sits in:
+`deal-info`'s `polygon_id` (e.g. `"53292326"`) is parcel-scoped, so
+street-deals on that id is essentially "deals on this parcel".
+
+The fix is to drop `deal-info` and use Govmap's
+`/real-estate/deals/{x},{y}/{radius}` endpoint instead, which returns
+**polygon metadata in a radius** (each polygon corresponds to a
+building / parcel block, identified as `"{gushNum}-{parcelNum}"`).
+For each polygon we then call `street-deals/{polygon_id}` and merge
+the results.
+
+This is the call shape documented by [`nitzpo/nadlan-mcp`](https://github.com/nitzpo/nadlan-mcp)
+(`nadlan_mcp/govmap/client.py:274`).
+
+## Discovery trail (PoC 1–13)
+
+| # | What it tried | What we learned |
+|---|---|---|
+| 1 | `POST search-service/autocomplete` | Works server-side. POINT in EPSG:3857. |
+| 2 | `GET pages/settlement/buy/{id}.json` | Settlement-level metadata, no deals. |
+| 3 | `apps/parcel-search/...` | Out of scope. |
+| 4 | `pages/neighborhood/buy/{id}.json` | Neighborhood metadata, no deals. |
+| 5–6 | Various `pages/.../buy/*` paths (street, polygon, address, deals) | 403/404 across the board. |
+| 7 | `GET real-estate/deals/(x y)/{radius}` (parens form) | Returned JSON in early run; later returned [] consistently — wrong URL shape. |
+| 8 | `GET real-estate/street-deals/{polygon_id}` | Works. Returns `{totalCount, data, …}`. 353 deals for our test polygon. |
+| 9 | `POST layers-catalog/entitiesByPoint` | Speculative. Not used. |
+| 10 | `deals/(x y)/{radius}` at radii 100/300/500/1000 | All empty — confirmed the `(x y)` URL shape doesn't work. |
+| 11 | Tried multiple `polygon_id` field names against `street-deals` | Field is `polygon_id` (snake case) but the polygon endpoint itself was wrong. |
+| 12 | **Cloned `nitzpo/nadlan-mcp` and read `client.py:274`** | URL uses **comma**, not space-in-parens. Headers are minimal. Confirmed `deals/{x},{y}/{radius}` returns polygons. |
+| 13 | Larger radii + full deal-shape dump | 100m → 16 polygons / 6 streets; 200m → 78 polygons / 17 streets; 500m hits a 100-row server cap. **`streetNameHeb` and `houseNum` are null on the deal payload itself**; they live on the polygon metadata. |
+
+## Final endpoints used
+
+| Step | Method | URL | Notes |
+|---|---|---|---|
+| 1. Autocomplete | POST | `https://www.govmap.gov.il/api/search-service/autocomplete` | `{searchText, language, isAccurate, maxResults}` |
+| 2. Polygons in radius | GET | `https://www.govmap.gov.il/api/real-estate/deals/{x},{y}/{radius}` | Comma between x and y. Returns list of polygon metadata. |
+| 3. Deals on a polygon | GET | `https://www.govmap.gov.il/api/real-estate/street-deals/{polygon_id}` | Returns `{totalCount, data, ...}`. |
+
+`api.nadlan.gov.il/deal-info` is **no longer used**.
+
+Headers for all three: `Content-Type: application/json` +
+`User-Agent: NadlanMCP/1.0.0`. Nothing else.
+
+## Production wiring
+
+* `find_comparable_deals(x, y, radius_m=200, max_deals=10)` in
+  `real_estate/govmap_client.py` is the only entry point.
+* Apartment-only filter (`propertyTypeDescription == "דירה"`).
+* Top 10 polygons by `dealscount`.
+* 0.2 s sleep between sequential street-deals calls.
+* Polygon-level address enrichment overrides the deal's null
+  `streetNameHeb` / `houseNum`.
+* Polygon-level failures swallowed silently (partial success).
+
+## Manual verification commands
+
+```bash
+# 1. Autocomplete — pick a result and grab its POINT(x y) coords.
+curl -s -X POST 'https://www.govmap.gov.il/api/search-service/autocomplete' \
+  -H 'Content-Type: application/json' \
+  -H 'User-Agent: NadlanMCP/1.0.0' \
+  -d '{"searchText":"רוטשילד 1 תל אביב","language":"he","isAccurate":false,"maxResults":10}' \
+  | python -m json.tool | head -30
+
+# 2. Polygons in radius — use the comma form, NOT (x y) with parens.
+curl -s 'https://www.govmap.gov.il/api/real-estate/deals/3870469.135,3771587.622/200' \
+  -H 'User-Agent: NadlanMCP/1.0.0' \
+  | python -m json.tool | head -40
+
+# 3. Deals on a polygon — uses the polygon_id from step 2.
+curl -s 'https://www.govmap.gov.il/api/real-estate/street-deals/7422-116' \
+  -H 'User-Agent: NadlanMCP/1.0.0' \
+  | python -m json.tool | head -40
+```
+
+Acceptance: step 2 at radius 200 m around "רוטשילד 1 תל אביב"
+should return at least 50 polygons spanning more than 10 distinct
+`streetNameHeb`s; step 3 on any of them should return `totalCount` ≥ 1.

@@ -1088,6 +1088,12 @@
       </div>
 
       <div class="f">
+        <label for="cmp-radius">רדיוס חיפוש: <span id="cmp-radius-value">200</span> מ'</label>
+        <input type="range" id="cmp-radius" min="50" max="500" value="200" step="50">
+        <span class="hint">50–500 מ' סביב הכתובת שנבחרה</span>
+      </div>
+
+      <div class="f">
         <label>&nbsp;</label>
         <button type="button" id="comparables-load-btn" class="btn-secondary" disabled>
           טען עסקאות
@@ -1095,7 +1101,8 @@
       </div>
     </div>
 
-    <input type="hidden" id="cmp-selected-addr-id" value="">
+    <input type="hidden" id="cmp-selected-itm-x" value="">
+    <input type="hidden" id="cmp-selected-itm-y" value="">
     <input type="hidden" id="cmp-selected-display" value="">
 
     <div id="comparables-status" class="hint" style="margin-top:10px;"></div>
@@ -1309,16 +1316,23 @@
     return fd;
   }
 
-  // ── Comparables (Govmap autocomplete + street-deals) ──────────────────────
+  // ── Comparables (Govmap autocomplete + deals-by-radius) ───────────────────
   (function () {
     const acInput     = document.getElementById('cmp-address-input');
     const acList      = document.getElementById('cmp-autocomplete-list');
-    const addrIdInput = document.getElementById('cmp-selected-addr-id');
+    const itmXInput   = document.getElementById('cmp-selected-itm-x');
+    const itmYInput   = document.getElementById('cmp-selected-itm-y');
     const dispInput   = document.getElementById('cmp-selected-display');
+    const radiusInput = document.getElementById('cmp-radius');
+    const radiusLabel = document.getElementById('cmp-radius-value');
     const btn         = document.getElementById('comparables-load-btn');
     const status      = document.getElementById('comparables-status');
     const results     = document.getElementById('comparables-results');
     const tbody       = document.getElementById('comparables-tbody');
+
+    radiusInput.addEventListener('input', () => {
+      radiusLabel.textContent = radiusInput.value;
+    });
 
     let acDebounce = null;
     let acAbort = null;
@@ -1348,7 +1362,8 @@
       items.forEach(item => {
         const li = document.createElement('li');
         li.setAttribute('role', 'option');
-        li.dataset.addrId = item.addr_id;
+        li.dataset.itmX = item.itm_x;
+        li.dataset.itmY = item.itm_y;
         li.dataset.display = item.display_name;
         li.innerHTML = `${escapeHtml(item.display_name)}` +
           `<span class="cmp-ac-type">${escapeHtml(item.type)}</span>`;
@@ -1363,10 +1378,11 @@
 
     function selectItem(item) {
       acInput.value = item.display_name;
-      addrIdInput.value = item.addr_id || '';
+      itmXInput.value = item.itm_x != null ? String(item.itm_x) : '';
+      itmYInput.value = item.itm_y != null ? String(item.itm_y) : '';
       dispInput.value = item.display_name;
       hideList();
-      btn.disabled = !item.addr_id;
+      btn.disabled = !(item.itm_x && item.itm_y);
       setStatus('', '');
     }
 
@@ -1386,7 +1402,7 @@
           hideList();
           return;
         }
-        const addressOnly = (data.results || []).filter(r => r.type === 'address' && r.addr_id);
+        const addressOnly = (data.results || []).filter(r => r.type === 'address' && r.itm_x && r.itm_y);
         if (!addressOnly.length) {
           setStatus('לא נמצאו כתובות מדויקות. נסה להוסיף מספר בית.', '');
           hideList();
@@ -1404,7 +1420,8 @@
     acInput.addEventListener('input', () => {
       // User edited the field — invalidate any prior selection so the
       // button stays disabled until they pick a fresh autocomplete row.
-      addrIdInput.value = '';
+      itmXInput.value = '';
+      itmYInput.value = '';
       dispInput.value = '';
       btn.disabled = true;
 
@@ -1461,18 +1478,20 @@
     }
 
     async function loadComparables() {
-      const addrId = addrIdInput.value.trim();
-      if (!addrId) {
+      const x = parseFloat(itmXInput.value);
+      const y = parseFloat(itmYInput.value);
+      const radius = parseInt(radiusInput.value, 10) || 200;
+      if (!isFinite(x) || !isFinite(y)) {
         setStatus('בחר כתובת מההצעות לפני טעינת עסקאות.', 'error');
         return;
       }
-      setStatus('טוען...', '');
+      setStatus(`טוען עסקאות ברדיוס ${radius} מ'...`, '');
       btn.disabled = true;
       try {
         const resp = await fetch('/shuma/comparables', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ addr_id: addrId, limit: 10 }),
+          body:    JSON.stringify({ itm_x: x, itm_y: y, radius_m: radius, max_deals: 10 }),
         });
         const data = await resp.json();
         if (!data.success) {
@@ -1482,7 +1501,7 @@
           return;
         }
         if (!data.deals || data.deals.length === 0) {
-          setStatus(data.message_he || 'לא נמצאו עסקאות ברחוב זה.', '');
+          setStatus(data.message_he || 'לא נמצאו עסקאות דירה ברדיוס שנבחר.', '');
           results.classList.add('hidden');
           window._comparablesFetchedAt = null;
           return;
@@ -1490,13 +1509,17 @@
         renderDeals(data.deals);
         results.classList.remove('hidden');
         window._comparablesFetchedAt = data.fetched_at || null;
-        setStatus(`נמצאו ${data.deals.length} עסקאות. סמן את אלה שייכנסו לדוח, השלם שטחי מרפסת אם ידועים.`, '');
+        setStatus(
+          `נמצאו ${data.deals.length} עסקאות דירה ברדיוס ${radius} מ'. ` +
+          'סמן את אלה שייכנסו לדוח, השלם שטחי מרפסת אם ידועים.',
+          '',
+        );
       } catch (err) {
         setStatus('שגיאת רשת בטעינת עסקאות.', 'error');
         results.classList.add('hidden');
         window._comparablesFetchedAt = null;
       } finally {
-        btn.disabled = !addrIdInput.value.trim();
+        btn.disabled = !(itmXInput.value.trim() && itmYInput.value.trim());
       }
     }
 
