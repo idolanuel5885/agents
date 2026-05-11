@@ -317,9 +317,144 @@ def _run_test_12() -> None:
     print("=" * 60)
 
 
+def _run_test_13() -> None:
+    """Drill deeper after Test 12: do larger radii surface more streets,
+    and what's the full deal shape?
+
+    Three sub-probes:
+      * 13a — repeat deals-by-radius at 100/200/500 m to see whether
+        bigger radii surface polygons from multiple streets (Test 12
+        at 50 m only saw 3 polygons, all likely on the same street).
+      * 13b — full JSON dump of one deal so we can see every field name
+        (streetNameHeb came back null in Test 12 — the real address may
+        live under a different key like ``addressDescription`` or
+        ``dealAddress``).
+      * 13c — try the two polygon_id formats we already have from
+        earlier probes: ``53292326`` (from deal-info) and ``50001103``
+        (street_code) against street-deals, to see whether either
+        returns deals with non-null address fields.
+    """
+    nitzpo_headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "NadlanMCP/1.0.0",
+    }
+
+    print()
+    print("=" * 60)
+    print("Test 13a: Larger radii with comma-format URL")
+    print("=" * 60)
+
+    test_x = 3870469.1352248313
+    test_y = 3771587.622787273
+
+    for radius in [100, 200, 500]:
+        url = (
+            f"https://www.govmap.gov.il/api/real-estate/deals/"
+            f"{test_x},{test_y}/{radius}"
+        )
+        try:
+            r = requests.get(url, headers=nitzpo_headers, timeout=15)
+            print(f"\nRadius {radius}m: status={r.status_code}, size={len(r.content)}")
+            if r.status_code == 200:
+                try:
+                    data = r.json()
+                except Exception as e:
+                    print(f"  JSON parse failed: {e}; first 200: {r.text[:200]}")
+                    continue
+                if isinstance(data, list):
+                    print(f"  Returned {len(data)} polygons")
+                    streets: set = set()
+                    polygon_ids = []
+                    for p in data:
+                        if isinstance(p, dict):
+                            sn = p.get("streetNameHeb")
+                            if sn:
+                                streets.add(sn)
+                            pid = p.get("polygon_id")
+                            if pid:
+                                polygon_ids.append(pid)
+                    print(
+                        f"  Distinct street names: "
+                        f"{sorted(streets) if streets else '(all null)'}"
+                    )
+                    print(f"  Sample polygon_ids (up to 5): {polygon_ids[:5]}")
+        except Exception as e:
+            print(f"  FAILED: {type(e).__name__}: {e}")
+
+    print()
+    print("=" * 60)
+    print("Test 13b: Full structure of a single deal from street-deals")
+    print("=" * 60)
+
+    poly_id = "7422-116"
+    url = f"https://www.govmap.gov.il/api/real-estate/street-deals/{poly_id}"
+    try:
+        r = requests.get(url, headers=nitzpo_headers, timeout=15)
+        if r.status_code == 200:
+            try:
+                data = r.json()
+            except Exception as e:
+                print(f"JSON parse failed: {e}; first 200: {r.text[:200]}")
+                data = None
+            if isinstance(data, dict):
+                deals = data.get("data") or []
+                if deals and isinstance(deals[0], dict):
+                    print(f"Got {len(deals)} deals. Full dump of first deal:")
+                    print(json.dumps(deals[0], ensure_ascii=False, indent=2))
+                    print()
+                    print(f"All field names: {sorted(deals[0].keys())}")
+                else:
+                    print("No deals or first deal is not a dict.")
+                    print(f"Top-level keys: {list(data.keys())}")
+        else:
+            print(f"Status {r.status_code}; body: {r.text[:300]}")
+    except Exception as e:
+        print(f"FAILED: {type(e).__name__}: {e}")
+
+    print()
+    print("=" * 60)
+    print("Test 13c: street-deals on a different polygon (try street_code format)")
+    print("=" * 60)
+
+    # 53292326 came from deal-info (street polygon), 50001103 was the
+    # street_code carried alongside it in the same payload.
+    for pid in ["53292326", "50001103"]:
+        url = f"https://www.govmap.gov.il/api/real-estate/street-deals/{pid}"
+        try:
+            r = requests.get(url, headers=nitzpo_headers, timeout=15)
+            print(f"\npolygon_id={pid}: status={r.status_code}, size={len(r.content)}")
+            if r.status_code == 200:
+                try:
+                    data = r.json()
+                except Exception as e:
+                    print(f"  JSON parse failed: {e}; first 200: {r.text[:200]}")
+                    continue
+                if isinstance(data, dict):
+                    deals = data.get("data") or []
+                    total = data.get("totalCount", "?")
+                    print(f"  totalCount={total}, returned {len(deals)} deals")
+                    if deals and isinstance(deals[0], dict):
+                        d = deals[0]
+                        print("  First deal address fields:")
+                        for k in [
+                            "streetNameHeb", "houseNum", "neighborhood",
+                            "settlementNameHeb", "gushNum", "parcelNum",
+                            "addressDescription", "dealAddress",
+                        ]:
+                            print(f"    {k}: {d.get(k)}")
+        except Exception as e:
+            print(f"  FAILED: {type(e).__name__}: {e}")
+
+    print()
+    print("=" * 60)
+    print("Test 13 complete.")
+    print("=" * 60)
+
+
 def _run_all() -> None:
     _run_probes()
     _run_test_12()
+    _run_test_13()
 
 
 def run_poc() -> str:
